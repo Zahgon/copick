@@ -66,23 +66,8 @@ class CopickPicksFSSpec(CopickPicksOverlay):
 
     run: "CopickRunFSSpec"
 
-    @property
-    def path(self) -> str:
-        if self.read_only:
-            return f"{self.run.static_path}/Picks/{self.user_id}_{self.session_id}_{self.pickable_object_name}.json"
-        else:
-            return f"{self.run.overlay_path}/Picks/{self.user_id}_{self.session_id}_{self.pickable_object_name}.json"
 
-    @property
-    def directory(self) -> str:
-        if self.read_only:
-            return f"{self.run.static_path}/Picks/"
-        else:
-            return f"{self.run.overlay_path}/Picks/"
 
-    @property
-    def fs(self) -> AbstractFileSystem:
-        return self.run.fs_static if self.read_only else self.run.fs_overlay
 
     def _load(self) -> CopickPicksFile:
         if not self.fs.exists(self.path):
@@ -119,23 +104,8 @@ class CopickMeshFSSpec(CopickMeshOverlay):
 
     run: "CopickRunFSSpec"
 
-    @property
-    def path(self) -> str:
-        if self.read_only:
-            return f"{self.run.static_path}/Meshes/{self.user_id}_{self.session_id}_{self.pickable_object_name}.glb"
-        else:
-            return f"{self.run.overlay_path}/Meshes/{self.user_id}_{self.session_id}_{self.pickable_object_name}.glb"
 
-    @property
-    def directory(self) -> str:
-        if self.read_only:
-            return f"{self.run.static_path}/Meshes/"
-        else:
-            return f"{self.run.overlay_path}/Meshes/"
 
-    @property
-    def fs(self) -> AbstractFileSystem:
-        return self.run.fs_static if self.read_only else self.run.fs_overlay
 
     def _load(self) -> "Geometry":
         if not self.fs.exists(self.path):
@@ -175,23 +145,8 @@ class CopickSegmentationFSSpec(CopickSegmentationOverlay):
 
     run: "CopickRunFSSpec"
 
-    @property
-    def filename(self) -> str:
-        if self.is_multilabel:
-            return f"{self.voxel_size:.3f}_{self.user_id}_{self.session_id}_{self.name}-multilabel.zarr"
-        else:
-            return f"{self.voxel_size:.3f}_{self.user_id}_{self.session_id}_{self.name}.zarr"
 
-    @property
-    def path(self) -> str:
-        if self.read_only:
-            return f"{self.run.static_path}/Segmentations/{self.filename}"
-        else:
-            return f"{self.run.overlay_path}/Segmentations/{self.filename}"
 
-    @property
-    def fs(self) -> AbstractFileSystem:
-        return self.run.fs_static if self.read_only else self.run.fs_overlay
 
     def zarr(self) -> zarr.storage.FSStore:
         """Get the zarr store for the segmentation object.
@@ -233,16 +188,7 @@ class CopickFeaturesFSSpec(CopickFeaturesOverlay):
 
     tomogram: "CopickTomogramFSSpec"
 
-    @property
-    def path(self) -> str:
-        if self.read_only:
-            return f"{self.tomogram.static_stem}_{self.feature_type}_features.zarr"
-        else:
-            return f"{self.tomogram.overlay_stem}_{self.feature_type}_features.zarr"
 
-    @property
-    def fs(self) -> AbstractFileSystem:
-        return self.tomogram.fs_static if self.read_only else self.tomogram.fs_overlay
 
     def zarr(self) -> zarr.storage.FSStore:
         """Get the zarr store for the features object.
@@ -292,80 +238,14 @@ class CopickTomogramFSSpec(CopickTomogramOverlay):
     def _feature_factory(self) -> Tuple[Type[CopickFeatures], Type["CopickFeaturesMeta"]]:
         return CopickFeaturesFSSpec, CopickFeaturesMeta
 
-    @property
-    def static_path(self) -> str:
-        return f"{self.voxel_spacing.static_path}/{self.tomo_type}.zarr"
 
-    @property
-    def overlay_path(self) -> str:
-        return f"{self.voxel_spacing.overlay_path}/{self.tomo_type}.zarr"
 
-    @property
-    def static_stem(self) -> str:
-        return f"{self.voxel_spacing.static_path}/{self.tomo_type}"
 
-    @property
-    def overlay_stem(self) -> str:
-        return f"{self.voxel_spacing.overlay_path}/{self.tomo_type}"
 
-    @property
-    def fs_static(self) -> AbstractFileSystem:
-        return self.voxel_spacing.fs_static
 
-    @property
-    def fs_overlay(self) -> AbstractFileSystem:
-        return self.voxel_spacing.fs_overlay
 
-    @property
-    def static_is_overlay(self) -> bool:
-        return self.fs_static == self.fs_overlay and self.static_path == self.overlay_path
 
-    def _query_static_features(self) -> List[CopickFeaturesFSSpec]:
-        if self.static_is_overlay:
-            return []
 
-        feat_loc = self.static_path.replace(".zarr", "_")
-        paths = self.fs_static.glob(feat_loc + "*_features.zarr") + self.fs_static.glob(feat_loc + "*_features.zarr/")
-        paths = [p.rstrip("/") for p in paths if self.fs_static.isdir(p)]
-        feature_types = [n.replace(feat_loc, "").replace("_features.zarr", "") for n in paths]
-        # Remove any hidden files?
-        feature_types = [ft for ft in feature_types if not ft.startswith(".")]
-
-        feature_types = list(set(feature_types))
-
-        return [
-            CopickFeaturesFSSpec(
-                tomogram=self,
-                meta=CopickFeaturesMeta(
-                    tomo_type=self.tomo_type,
-                    feature_type=ft,
-                ),
-                read_only=True,
-            )
-            for ft in feature_types
-        ]
-
-    def _query_overlay_features(self) -> List[CopickFeaturesFSSpec]:
-        feat_loc = self.overlay_path.replace(".zarr", "_")
-        paths = self.fs_overlay.glob(feat_loc + "*_features.zarr") + self.fs_overlay.glob(feat_loc + "*_features.zarr/")
-        paths = [p.rstrip("/") for p in paths if self.fs_overlay.isdir(p)]
-        feature_types = [n.replace(feat_loc, "").replace("_features.zarr", "") for n in paths]
-        # Remove any hidden files?
-        feature_types = [ft for ft in feature_types if not ft.startswith(".")]
-
-        feature_types = list(set(feature_types))
-
-        return [
-            CopickFeaturesFSSpec(
-                tomogram=self,
-                meta=CopickFeaturesMeta(
-                    tomo_type=self.tomo_type,
-                    feature_type=ft,
-                ),
-                read_only=False,
-            )
-            for ft in feature_types
-        ]
 
     def zarr(self) -> zarr.storage.FSStore:
         """Get the zarr store for the tomogram object.
@@ -418,68 +298,12 @@ class CopickVoxelSpacingFSSpec(CopickVoxelSpacingOverlay):
     def _tomogram_factory(self) -> Tuple[Type[CopickTomogramFSSpec], Type[CopickTomogramMeta]]:
         return CopickTomogramFSSpec, CopickTomogramMeta
 
-    @property
-    def static_path(self) -> str:
-        return f"{self.run.static_path}/VoxelSpacing{self.voxel_size:.3f}"
 
-    @property
-    def overlay_path(self) -> str:
-        return f"{self.run.overlay_path}/VoxelSpacing{self.voxel_size:.3f}"
 
-    @property
-    def fs_static(self) -> AbstractFileSystem:
-        return self.run.fs_static
 
-    @property
-    def fs_overlay(self) -> AbstractFileSystem:
-        return self.run.fs_overlay
 
-    @property
-    def static_is_overlay(self) -> bool:
-        return self.fs_static == self.fs_overlay and self.static_path == self.overlay_path
 
-    def _query_static_tomograms(self) -> List[CopickTomogramFSSpec]:
-        if self.static_is_overlay:
-            return []
 
-        tomo_loc = f"{self.static_path}/"
-        paths = self.fs_static.glob(tomo_loc + "*.zarr") + self.fs_static.glob(tomo_loc + "*.zarr/")
-        paths = [p.rstrip("/") for p in paths if self.fs_static.isdir(p)]
-        tomo_types = [n.replace(tomo_loc, "").replace(".zarr", "") for n in paths]
-        tomo_types = [t for t in tomo_types if "features" not in t]
-        # Remove any hidden files?
-        tomo_types = [tt for tt in tomo_types if not tt.startswith(".")]
-
-        tomo_types = list(set(tomo_types))
-
-        return [
-            CopickTomogramFSSpec(
-                voxel_spacing=self,
-                meta=CopickTomogramMeta(tomo_type=tt),
-                read_only=True,
-            )
-            for tt in tomo_types
-        ]
-
-    def _query_overlay_tomograms(self) -> List[CopickTomogramFSSpec]:
-        tomo_loc = f"{self.overlay_path}/"
-        paths = self.fs_overlay.glob(tomo_loc + "*.zarr") + self.fs_overlay.glob(tomo_loc + "*.zarr/")
-        paths = [p.rstrip("/") for p in paths if self.fs_overlay.isdir(p)]
-        tomo_types = [n.replace(tomo_loc, "").replace(".zarr", "") for n in paths]
-        tomo_types = [t for t in tomo_types if "features" not in t]
-        # Remove any hidden files?
-        tomo_types = [tt for tt in tomo_types if not tt.startswith(".")]
-
-        tomo_types = list(set(tomo_types))
-
-        return [
-            CopickTomogramFSSpec(
-                voxel_spacing=self,
-                meta=CopickTomogramMeta(tomo_type=tt),
-                read_only=False,
-            )
-            for tt in tomo_types
-        ]
 
     def ensure(self, create: bool = False) -> bool:
         """Checks if the voxel spacing record exists in the static or overlay directory, optionally creating it in the
@@ -538,56 +362,12 @@ class CopickRunFSSpec(CopickRunOverlay):
     def _segmentation_factory(self) -> Tuple[Type[CopickSegmentationFSSpec], Type[CopickSegmentationMeta]]:
         return CopickSegmentationFSSpec, CopickSegmentationMeta
 
-    @property
-    def static_path(self) -> str:
-        return f"{self.root.root_static}/ExperimentRuns/{self.name}"
 
-    @property
-    def overlay_path(self) -> str:
-        return f"{self.root.root_overlay}/ExperimentRuns/{self.name}"
 
-    @property
-    def fs_static(self) -> AbstractFileSystem:
-        return self.root.fs_static
 
-    @property
-    def fs_overlay(self) -> AbstractFileSystem:
-        return self.root.fs_overlay
 
-    @property
-    def static_is_overlay(self) -> bool:
-        return self.fs_static == self.fs_overlay and self.static_path == self.overlay_path
 
-    def _query_static_voxel_spacings(self) -> List[CopickVoxelSpacingFSSpec]:
-        if self.static_is_overlay:
-            return []
 
-        static_vs_loc = f"{self.static_path}/VoxelSpacing"
-        spaths = set(self.fs_static.glob(static_vs_loc + "*") + self.fs_static.glob(static_vs_loc + "*/"))
-        spaths = [p.rstrip("/") for p in spaths]
-        spacings = [float(p.replace(f"{static_vs_loc}", "")) for p in spaths]
-
-        return [
-            CopickVoxelSpacingFSSpec(
-                meta=CopickVoxelSpacingMeta(voxel_size=s),
-                run=self,
-            )
-            for s in spacings
-        ]
-
-    def _query_overlay_voxel_spacings(self) -> List[CopickVoxelSpacingFSSpec]:
-        overlay_vs_loc = f"{self.overlay_path}/VoxelSpacing"
-        opaths = set(self.fs_overlay.glob(overlay_vs_loc + "*") + self.fs_overlay.glob(overlay_vs_loc + "*/"))
-        opaths = [p.rstrip("/") for p in opaths]
-        spacings = [float(p.replace(f"{overlay_vs_loc}", "")) for p in opaths]
-
-        return [
-            CopickVoxelSpacingFSSpec(
-                meta=CopickVoxelSpacingMeta(voxel_size=s),
-                run=self,
-            )
-            for s in spacings
-        ]
 
     def _query_static_picks(self) -> List[CopickPicksFSSpec]:
         if self.static_is_overlay:
@@ -644,155 +424,9 @@ class CopickRunFSSpec(CopickRunOverlay):
             for u, s, o in zip(users, sessions, objects, strict=True)
         ]
 
-    def _query_static_meshes(self) -> List[CopickMeshFSSpec]:
-        if self.static_is_overlay:
-            return []
 
-        mesh_loc = f"{self.static_path}/Meshes/"
-        paths = self.fs_static.glob(mesh_loc + "*.glb")
-        names = [n.replace(mesh_loc, "").replace(".glb", "") for n in paths]
-        # Remove any hidden files?
-        names = [n for n in names if not n.startswith(".")]
 
-        users = [n.split("_")[0] for n in names]
-        sessions = [n.split("_")[1] for n in names]
-        objects = [n.split("_")[2] for n in names]
 
-        assert len(users) == len(sessions) == len(objects)
-
-        return [
-            CopickMeshFSSpec(
-                run=self,
-                meta=CopickMeshMeta(
-                    pickable_object_name=o,
-                    user_id=u,
-                    session_id=s,
-                ),
-                read_only=True,
-            )
-            for u, s, o in zip(users, sessions, objects, strict=True)
-        ]
-
-    def _query_overlay_meshes(self) -> List[CopickMeshFSSpec]:
-        mesh_loc = f"{self.overlay_path}/Meshes/"
-        paths = self.fs_overlay.glob(mesh_loc + "*.glb")
-        names = [n.replace(mesh_loc, "").replace(".glb", "") for n in paths]
-        # Remove any hidden files?
-        names = [n for n in names if not n.startswith(".")]
-
-        users = [n.split("_")[0] for n in names]
-        sessions = [n.split("_")[1] for n in names]
-        objects = [n.split("_")[2] for n in names]
-
-        assert len(users) == len(sessions) == len(objects)
-
-        return [
-            CopickMeshFSSpec(
-                run=self,
-                meta=CopickMeshMeta(
-                    pickable_object_name=o,
-                    user_id=u,
-                    session_id=s,
-                ),
-                read_only=False,
-            )
-            for u, s, o in zip(users, sessions, objects, strict=True)
-        ]
-
-    def _query_static_segmentations(self) -> List[CopickSegmentationFSSpec]:
-        if self.static_is_overlay:
-            return []
-
-        seg_loc = f"{self.static_path}/Segmentations/"
-        paths = self.fs_static.glob(seg_loc + "*.zarr") + self.fs_static.glob(seg_loc + "*.zarr/")
-        paths = [p.rstrip("/") for p in paths if self.fs_static.isdir(p)]
-        names = [n.replace(seg_loc, "").replace(".zarr", "") for n in paths]
-        # Remove any hidden files?
-        names = [n for n in names if not n.startswith(".")]
-
-        # Deduplicate
-        names = list(set(names))
-
-        # multilabel vs single label
-        metas = []
-        for n in names:
-            if "multilabel" in n:
-                parts = n.split("_")
-                metas.append(
-                    CopickSegmentationMeta(
-                        is_multilabel=True,
-                        voxel_size=float(parts[0]),
-                        user_id=parts[1],
-                        session_id=parts[2],
-                        name=parts[3].replace("-multilabel", ""),
-                    ),
-                )
-            else:
-                parts = n.split("_")
-                metas.append(
-                    CopickSegmentationMeta(
-                        is_multilabel=False,
-                        voxel_size=float(parts[0]),
-                        user_id=parts[1],
-                        session_id=parts[2],
-                        name=parts[3],
-                    ),
-                )
-
-        return [
-            CopickSegmentationFSSpec(
-                run=self,
-                meta=m,
-                read_only=True,
-            )
-            for m in metas
-        ]
-
-    def _query_overlay_segmentations(self) -> List[CopickSegmentationFSSpec]:
-        seg_loc = f"{self.overlay_path}/Segmentations/"
-        paths = self.fs_overlay.glob(seg_loc + "*.zarr") + self.fs_overlay.glob(seg_loc + "*.zarr/")
-        paths = [p.rstrip("/") for p in paths if self.fs_overlay.isdir(p)]
-        names = [n.replace(seg_loc, "").replace(".zarr", "") for n in paths]
-        # Remove any hidden files?
-        names = [n for n in names if not n.startswith(".")]
-
-        # Deduplicate
-        names = list(set(names))
-
-        # multilabel vs single label
-        metas = []
-        for n in names:
-            if "multilabel" in n:
-                parts = n.split("_")
-                metas.append(
-                    CopickSegmentationMeta(
-                        is_multilabel=True,
-                        voxel_size=float(parts[0]),
-                        user_id=parts[1],
-                        session_id=parts[2],
-                        name=parts[3].replace("-multilabel", ""),
-                    ),
-                )
-            else:
-                parts = n.split("_")
-                metas.append(
-                    CopickSegmentationMeta(
-                        is_multilabel=False,
-                        voxel_size=float(parts[0]),
-                        user_id=parts[1],
-                        session_id=parts[2],
-                        name=parts[3],
-                    ),
-                )
-
-        return [
-            CopickSegmentationFSSpec(
-                run=self,
-                meta=m,
-                read_only=False,
-            )
-            for m in metas
-        ]
 
     def ensure(self, create: bool = False) -> bool:
         """Checks if the run record exists in the static or overlay directory, optionally creating it in the overlay
@@ -839,25 +473,10 @@ class CopickObjectFSSpec(CopickObjectOverlay):
 
     root: "CopickRootFSSpec"
 
-    @property
-    def static_path(self) -> str:
-        return f"{self.root.root_static}/Objects/{self.name}.zarr"
 
-    @property
-    def overlay_path(self) -> str:
-        return f"{self.root.root_overlay}/Objects/{self.name}.zarr"
 
-    @property
-    def fs_static(self) -> AbstractFileSystem:
-        return self.root.fs_static
 
-    @property
-    def fs_overlay(self) -> AbstractFileSystem:
-        return self.root.fs_overlay
 
-    @property
-    def static_is_overlay(self) -> bool:
-        return self.fs_static == self.fs_overlay and self.static_path == self.overlay_path
 
     def zarr(self) -> Union[None, zarr.storage.FSStore]:
         """Get the zarr store for the object.
@@ -933,15 +552,10 @@ class CopickRootFSSpec(CopickRoot):
         if self.fs_static is not self.fs_overlay:
             self.fs_static._root_ref = weakref.ref(self)
 
-    @property
-    def static_is_overlay(self) -> bool:
-        return self.fs_static == self.fs_overlay and self.root_static == self.root_overlay
 
     def reconnect(self) -> None:
         """Force reconnection of all filesystems and invalidate caches."""
-        self.fs_overlay._reconnect()
-        if self.fs_static is not self.fs_overlay:
-            self.fs_static._reconnect()
+        pass
 
     @classmethod
     def from_file(cls, path: str) -> "CopickRootFSSpec":
@@ -964,77 +578,10 @@ class CopickRootFSSpec(CopickRoot):
     def _object_factory(self) -> Tuple[Type[CopickObjectFSSpec], Type[PickableObject]]:
         return CopickObjectFSSpec, PickableObject
 
-    @staticmethod
-    def _query_names(fs, root) -> List[str]:
-        # Query location
-        run_dir = f"{root}/ExperimentRuns/"
-        paths = fs.glob(run_dir + "**", maxdepth=1, detail=True)
-        names = [
-            p.rstrip("/").replace(run_dir, "")
-            for p, details in paths.items()
-            if (details.get("type", "") == "directory")
-            or (details.get("type", "") == "other" and details.get("islink", False))
-            or (details.get("type", "") == "link")
-        ]
 
-        # Remove any hidden files
-        names = [n for n in names if not n.startswith(".") and n != f"{root}/ExperimentRuns"]
 
-        return names
 
-    def _query_static_names(self) -> List[str]:
-        return self._query_names(self.fs_static, self.root_static)
-
-    def _query_overlay_names(self) -> List[str]:
-        return self._query_names(self.fs_overlay, self.root_overlay)
-
-    def query(self) -> List[CopickRunFSSpec]:
-        # Query filesystems in parallel
-        if self.static_is_overlay:
-            tasks = [self._query_overlay_names]
-        else:
-            tasks = [self._query_static_names, self._query_overlay_names]
-
-        names = []
-
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            futures = [executor.submit(t) for t in tasks]
-            for future in concurrent.futures.as_completed(futures):
-                names += future.result()
-
-        # Deduplicate
-        names = sorted(set(names))
-
-        # Create objects
-        runs = []
-        for n in names:
-            rm = CopickRunMeta(name=n)
-            runs.append(CopickRunFSSpec(root=self, meta=rm))
-
-        return runs
 
     def _query_objects(self):
         """Override to check if each object from config exists in static or overlay filesystem."""
-        clz, meta_clz = self._object_factory()
-        objects = []
-
-        for obj_meta in self.config.pickable_objects:
-            # Check if object exists in static filesystem
-            static_path = f"{self.root_static}/Objects/{obj_meta.name}.zarr"
-            overlay_path = f"{self.root_overlay}/Objects/{obj_meta.name}.zarr"
-
-            # Determine if object should be read-only
-            if self.static_is_overlay:
-                # If static and overlay are the same, always writable
-                read_only = False
-            else:
-                # If object exists in static but not overlay, it's read-only
-                # If object exists in overlay (regardless of static), it's writable
-                static_exists = self.fs_static.exists(static_path)
-                overlay_exists = self.fs_overlay.exists(overlay_path)
-                read_only = static_exists and not overlay_exists
-
-            obj = clz(self, obj_meta, read_only=read_only)
-            objects.append(obj)
-
-        self._objects = objects
+        pass

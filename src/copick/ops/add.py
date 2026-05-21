@@ -251,31 +251,7 @@ def z_add_tomogram_mrc(
         transpose (str, optional): Transpose axes. E.g., '2,1,0' to reverse all axes. Default: None.
         flip (str, optional): Flip axes. E.g., '0' to flip Z, '0,2' to flip Z and X. Default: None.
     """
-
-    with mrcfile.open(volume_file) as mrc:
-        volume = mrc.data
-        voxel_size = float(mrc.voxel_size.x)
-
-    if voxel_spacing:
-        voxel_size = voxel_spacing
-
-    return add_tomogram(
-        root,
-        run,
-        tomo_type,
-        volume,
-        voxel_spacing=voxel_size,
-        create=create,
-        exist_ok=exist_ok,
-        overwrite=overwrite,
-        create_pyramid=create_pyramid,
-        pyramid_levels=pyramid_levels,
-        chunks=chunks,
-        transpose=transpose,
-        flip=flip,
-        meta=meta,
-        log=log,
-    )
+    pass
 
 
 def _add_tomogram_zarr(
@@ -307,32 +283,7 @@ def _add_tomogram_zarr(
         transpose (str, optional): Transpose axes. E.g., '2,1,0' to reverse all axes. Default: None.
         flip (str, optional): Flip axes. E.g., '0' to flip Z, '0,2' to flip Z and X. Default: None.
     """
-
-    zarr_group = zarr.open(volume_file)
-    # Get the first level data (level 0)
-    volume = np.array(zarr_group["0"])
-    voxel_size = get_voxel_size_from_zarr(zarr_group)
-
-    if voxel_spacing:
-        voxel_size = voxel_spacing
-
-    return add_tomogram(
-        root,
-        run,
-        tomo_type,
-        volume,
-        voxel_spacing=voxel_size,
-        create=create,
-        exist_ok=exist_ok,
-        overwrite=overwrite,
-        create_pyramid=create_pyramid,
-        pyramid_levels=pyramid_levels,
-        chunks=chunks,
-        transpose=transpose,
-        flip=flip,
-        meta=meta,
-        log=log,
-    )
+    pass
 
 
 def add_features(
@@ -963,71 +914,7 @@ def _add_picks_dynamo_grouped(
     Returns:
         Dictionary mapping run names to created CopickPicks objects.
     """
-    from copick.util.formats import dynamo_to_copick_transform, read_dynamo_table
-
-    # Read the Dynamo table with tomogram indices
-    positions_px, eulers_deg, shifts_px, scores, tomo_indices = read_dynamo_table(
-        path,
-        include_tomo_index=True,
-    )
-
-    # Group particles by tomogram index
-    unique_indices = np.unique(tomo_indices)
-    results = {}
-    skipped_count = 0
-
-    for tomo_idx in unique_indices:
-        tomo_idx = int(tomo_idx)
-
-        # Check if this index is in the mapping
-        if tomo_idx not in index_to_run:
-            mask = tomo_indices == tomo_idx
-            skipped_count += np.sum(mask)
-            if log:
-                logging.warning(
-                    f"Tomogram index {tomo_idx} not found in mapping, skipping {np.sum(mask)} particles.",
-                )
-            continue
-
-        run_name = index_to_run[tomo_idx]
-
-        # Get particles for this tomogram
-        mask = tomo_indices == tomo_idx
-        pos_subset = positions_px[mask]
-        euler_subset = eulers_deg[mask]
-        shift_subset = shifts_px[mask]
-
-        # Convert to copick format
-        points_angstrom, transforms = dynamo_to_copick_transform(
-            pos_subset,
-            euler_subset,
-            shift_subset,
-            voxel_spacing,
-        )
-
-        # Get or create run
-        runobj = get_or_create_run(root, run_name, create=create, log=log)
-
-        # Create the picks
-        picks = runobj.new_picks(
-            object_name=object_name,
-            user_id=user_id,
-            session_id=session_id,
-            exist_ok=exist_ok or overwrite,
-        )
-
-        picks.from_numpy(points_angstrom, transforms)
-        results[run_name] = picks
-
-        if log:
-            logging.info(
-                f"Added {len(points_angstrom)} picks from Dynamo table to run {run_name}.",
-            )
-
-    if skipped_count > 0 and log:
-        logging.warning(f"Total skipped particles due to unmapped indices: {skipped_count}")
-
-    return results
+    pass
 
 
 def _add_picks_em_grouped(
@@ -1063,68 +950,7 @@ def _add_picks_em_grouped(
     Returns:
         Dictionary mapping run names to created CopickPicks objects.
     """
-    from copick.util.formats import em_to_copick_transform, read_em_motivelist
-
-    # Read the EM file with tomogram indices
-    positions_px, eulers_deg, scores, tomo_indices = read_em_motivelist(
-        path,
-        include_tomo_index=True,
-        tomo_index_row=tomo_index_row,
-    )
-
-    # Group particles by tomogram index
-    unique_indices = np.unique(tomo_indices)
-    results = {}
-    skipped_count = 0
-
-    for tomo_idx in unique_indices:
-        tomo_idx = int(tomo_idx)
-
-        # Check if this index is in the mapping
-        if tomo_idx not in index_to_run:
-            mask = tomo_indices == tomo_idx
-            skipped_count += np.sum(mask)
-            if log:
-                logging.warning(
-                    f"Tomogram index {tomo_idx} not found in mapping, skipping {np.sum(mask)} particles.",
-                )
-            continue
-
-        run_name = index_to_run[tomo_idx]
-
-        # Get particles for this tomogram
-        mask = tomo_indices == tomo_idx
-        pos_subset = positions_px[mask]
-        euler_subset = eulers_deg[mask]
-
-        # Get or create run
-        runobj = get_or_create_run(root, run_name, create=create, log=log)
-
-        # Convert to copick format (no tomogram dimensions needed - TOM uses corner-origin)
-        points_angstrom, transforms = em_to_copick_transform(
-            pos_subset,
-            euler_subset,
-            voxel_spacing,
-        )
-
-        # Create the picks
-        picks = runobj.new_picks(
-            object_name=object_name,
-            user_id=user_id,
-            session_id=session_id,
-            exist_ok=exist_ok or overwrite,
-        )
-
-        picks.from_numpy(points_angstrom, transforms)
-        results[run_name] = picks
-
-        if log:
-            logging.info(f"Added {len(points_angstrom)} picks from EM file to run {run_name}.")
-
-    if skipped_count > 0 and log:
-        logging.warning(f"Total skipped particles due to unmapped indices: {skipped_count}")
-
-    return results
+    pass
 
 
 def _add_picks_csv(
@@ -1230,33 +1056,7 @@ def _add_tomogram_tiff(
     Returns:
         The created CopickTomogram object.
     """
-    from copick.util.formats import read_tiff_volume
-
-    if voxel_spacing is None:
-        e = ValueError("voxel_spacing must be provided for TIFF import.")
-        if log:
-            logging.exception(e)
-        raise e
-
-    volume = read_tiff_volume(volume_file)
-
-    return add_tomogram(
-        root,
-        run,
-        tomo_type,
-        volume,
-        voxel_spacing=voxel_spacing,
-        create=create,
-        exist_ok=exist_ok,
-        overwrite=overwrite,
-        create_pyramid=create_pyramid,
-        pyramid_levels=pyramid_levels,
-        chunks=chunks,
-        transpose=transpose,
-        flip=flip,
-        meta=meta,
-        log=log,
-    )
+    pass
 
 
 def _add_tomogram_em(
@@ -1298,33 +1098,7 @@ def _add_tomogram_em(
     Returns:
         The created CopickTomogram object.
     """
-    from copick.util.formats import read_em_volume
-
-    if voxel_spacing is None:
-        e = ValueError("voxel_spacing must be provided for EM import.")
-        if log:
-            logging.exception(e)
-        raise e
-
-    volume = read_em_volume(volume_file)
-
-    return add_tomogram(
-        root,
-        run,
-        tomo_type,
-        volume,
-        voxel_spacing=voxel_spacing,
-        create=create,
-        exist_ok=exist_ok,
-        overwrite=overwrite,
-        create_pyramid=create_pyramid,
-        pyramid_levels=pyramid_levels,
-        chunks=chunks,
-        transpose=transpose,
-        flip=flip,
-        meta=meta,
-        log=log,
-    )
+    pass
 
 
 # =============================================================================
@@ -1369,35 +1143,7 @@ def _add_segmentation_from_array(
     Returns:
         The created CopickSegmentation object.
     """
-    # Apply transpose if specified
-    if transpose:
-        axes = tuple(int(x.strip()) for x in transpose.split(","))
-        volume = np.transpose(volume, axes)
-
-    # Apply flip if specified (after transpose)
-    if flip:
-        flip_axes = tuple(int(x.strip()) for x in flip.split(","))
-        for axis in flip_axes:
-            volume = np.flip(volume, axis=axis)
-
-    runobj = get_or_create_run(root, run, create=create)
-
-    segmentation = runobj.new_segmentation(
-        name=name,
-        user_id=user_id,
-        is_multilabel=multilabel,
-        voxel_size=voxel_spacing,
-        session_id=session_id,
-        exist_ok=exist_ok,
-        overwrite=overwrite,
-    )
-
-    segmentation.from_numpy(volume)
-
-    if log:
-        logging.info(f"Added segmentation {name} to run {run}.")
-
-    return segmentation
+    pass
 
 
 def _add_segmentation_tiff(
@@ -1437,32 +1183,7 @@ def _add_segmentation_tiff(
     Returns:
         The created CopickSegmentation object.
     """
-    from copick.util.formats import read_tiff_volume
-
-    if voxel_spacing is None:
-        e = ValueError("voxel_spacing must be provided for TIFF import.")
-        if log:
-            logging.exception(e)
-        raise e
-
-    volume = read_tiff_volume(volume_file)
-
-    return _add_segmentation_from_array(
-        root=root,
-        run=run,
-        volume=volume,
-        voxel_spacing=voxel_spacing,
-        name=name,
-        user_id=user_id,
-        session_id=session_id,
-        multilabel=multilabel,
-        transpose=transpose,
-        flip=flip,
-        create=create,
-        exist_ok=exist_ok,
-        overwrite=overwrite,
-        log=log,
-    )
+    pass
 
 
 def _add_segmentation_em(
@@ -1502,32 +1223,7 @@ def _add_segmentation_em(
     Returns:
         The created CopickSegmentation object.
     """
-    from copick.util.formats import read_em_volume
-
-    if voxel_spacing is None:
-        e = ValueError("voxel_spacing must be provided for EM import.")
-        if log:
-            logging.exception(e)
-        raise e
-
-    volume = read_em_volume(volume_file)
-
-    return _add_segmentation_from_array(
-        root=root,
-        run=run,
-        volume=volume,
-        voxel_spacing=voxel_spacing,
-        name=name,
-        user_id=user_id,
-        session_id=session_id,
-        multilabel=multilabel,
-        transpose=transpose,
-        flip=flip,
-        create=create,
-        exist_ok=exist_ok,
-        overwrite=overwrite,
-        log=log,
-    )
+    pass
 
 
 # =============================================================================
@@ -1581,49 +1277,7 @@ def add_tomogram_from_file(
     Raises:
         ValueError: If the format is not supported or voxel spacing cannot be determined.
     """
-    from copick.util.handlers import FormatRegistry
-
-    # Get handler
-    handler = FormatRegistry.get_volume_handler(file_type or file_path)
-    if handler is None:
-        raise ValueError(f"Unsupported volume format for: {file_path}")
-
-    # Read volume
-    volume, file_voxel_size = handler.read(file_path)
-
-    # Determine effective voxel spacing
-    effective_voxel_spacing = voxel_spacing if voxel_spacing is not None else file_voxel_size
-    if effective_voxel_spacing is None:
-        raise ValueError(
-            f"Voxel spacing not provided and cannot be determined from {handler.format_name} file. "
-            f"Please specify --voxel-size.",
-        )
-
-    # Apply transforms
-    if transpose is not None:
-        transpose_order = tuple(map(int, transpose.split(",")))
-        volume = np.transpose(volume, transpose_order)
-
-    if flip is not None:
-        flip_axes = tuple(map(int, flip.split(",")))
-        for axis in flip_axes:
-            volume = np.flip(volume, axis=axis)
-
-    # Use the existing add_tomogram function
-    return add_tomogram(
-        root=root,
-        run=run_name,
-        tomo_type=tomo_type,
-        volume=volume,
-        voxel_spacing=effective_voxel_spacing,
-        create_pyramid=create_pyramid,
-        pyramid_levels=pyramid_levels,
-        chunks=chunks,
-        create=create,
-        exist_ok=exist_ok,
-        overwrite=overwrite,
-        log=log,
-    )
+    pass
 
 
 def add_picks_from_file(
@@ -1756,40 +1410,7 @@ def add_segmentation_from_file(
     Raises:
         ValueError: If the format is not supported.
     """
-    from copick.util.handlers import FormatRegistry
-
-    # Get handler
-    handler = FormatRegistry.get_volume_handler(file_type or file_path)
-    if handler is None:
-        raise ValueError(f"Unsupported volume format for: {file_path}")
-
-    # Read volume
-    volume, file_voxel_size = handler.read(file_path)
-
-    # Determine effective voxel spacing
-    effective_voxel_spacing = voxel_spacing if voxel_spacing is not None else file_voxel_size
-    if effective_voxel_spacing is None:
-        raise ValueError(
-            f"Voxel spacing not provided and cannot be determined from {handler.format_name} file. "
-            f"Please specify --voxel-size.",
-        )
-
-    return _add_segmentation_from_array(
-        root=root,
-        run=run_name,
-        volume=volume,
-        voxel_spacing=effective_voxel_spacing,
-        name=name,
-        user_id=user_id,
-        session_id=session_id,
-        multilabel=multilabel,
-        transpose=transpose,
-        flip=flip,
-        create=create,
-        exist_ok=exist_ok,
-        overwrite=overwrite,
-        log=log,
-    )
+    pass
 
 
 def add_picks_grouped_from_file(

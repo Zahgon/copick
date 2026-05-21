@@ -374,60 +374,23 @@ def _is_local_protocol(url: str) -> bool:
     kwargs like ``auto_mkdir`` make sense (local-only) vs would confuse a
     remote fsspec backend.
     """
-    if not url:
-        return True
-    if url.startswith("file://") or url.startswith("local://"):
-        return True
-    return not _has_protocol(url)
+    pass
 
 
 def _strip_includes_glob(includes: str) -> str:
     """Strip a trailing ``/**`` (or ``**``) pattern from a FileSet includes glob."""
-    if includes.endswith("/**"):
-        return includes[:-3]
-    if includes.endswith("/**/*"):
-        return includes[:-5]
-    if includes.endswith("**"):
-        return includes[:-2].rstrip("/")
-    return includes
+    pass
 
 
 def _sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def _sha256_path(fs: AbstractFileSystem, path: str) -> str:
-    with fs.open(path, "rb") as f:
-        h = hashlib.sha256()
-        while True:
-            chunk = f.read(1024 * 1024)
-            if not chunk:
-                break
-            h.update(chunk)
-    return h.hexdigest()
 
 
 def _coerce_cell(value: Any, type_hint: str) -> Any:
     """Coerce a CSV cell into the correct Python type for a given Field dataType."""
-    if value is None:
-        return None
-    if isinstance(value, bytes):
-        value = value.decode("utf-8")
-    if type_hint == "sc:Float":
-        if value == "" or value is None:
-            return None
-        return float(value)
-    if type_hint == "sc:Integer":
-        if value == "" or value is None:
-            return None
-        return int(value)
-    if type_hint == "sc:Boolean":
-        if isinstance(value, bool):
-            return value
-        if value == "" or value is None:
-            return None
-        return str(value).strip().lower() in ("true", "1", "yes")
-    return value if value != "" else None
+    pass
 
 
 # -----------------------------------------------------------------------------
@@ -486,114 +449,11 @@ class CroissantIndex:
         ``static_fs_args`` are stored on the index and applied when resolving
         data URLs against ``base_url`` via :meth:`resolve_url`.
         """
-        fs_args = fs_args or {}
-        croissant_fs, croissant_path = _fs_for_url(croissant_url, **fs_args)
-
-        with croissant_fs.open(croissant_path, "rb") as f:
-            raw = f.read()
-        doc = json.loads(raw.decode("utf-8"))
-
-        # Determine base URL
-        base_url = base_url_override
-        if not base_url:
-            base_url = doc.get("copick:baseUrl", "")
-        if not base_url:
-            # Default: project root = parent of Croissant/ = parent of metadata.json's parent
-            # If croissant_url is .../Croissant/metadata.json, project root is .../
-            parent = os.path.dirname(croissant_path)
-            project_root = os.path.dirname(parent)
-            # Re-attach protocol if present
-            if croissant_url.startswith("file://"):
-                base_url = "file://" + project_root
-            elif _has_protocol(croissant_url):
-                parsed = urlparse(croissant_url)
-                project_path = os.path.dirname(os.path.dirname(parsed.path))
-                base_url = f"{parsed.scheme}://{parsed.netloc}{project_path}"
-            else:
-                base_url = project_root
-
-        # Directory that holds metadata.json + the CSV sidecars
-        croissant_dir = os.path.dirname(croissant_path) or "."
-
-        index = cls(
-            doc=doc,
-            croissant_dir=croissant_dir,
-            croissant_fs=croissant_fs,
-            base_url=base_url,
-            static_fs_args=dict(static_fs_args or {}),
-            config_block=doc.get("copick:config", {}),
-            _metadata_path=croissant_path,
-        )
-
-        # Decide writability by probing the fs
-        index._writable = _fs_writable(croissant_fs, croissant_dir)
-
-        # Materialise CSV rows via mlcroissant
-        index._load_records()
-
-        return index
+        pass
 
     def _load_records(self) -> None:
         """Load all 8 CSVs into typed Python dicts via mlcroissant.Dataset.records()."""
-        try:
-            import mlcroissant as mlc
-        except ImportError as e:
-            raise ImportError(
-                "mlcroissant is required for the mlcroissant copick backend. "
-                "Install it with `pip install mlcroissant`.",
-            ) from e
-
-        # Before calling mlcroissant, rewrite CSV FileObject contentUrls to local
-        # paths where possible — mlcroissant uses these to download + iterate,
-        # and it rejects file:// prefixes for local files.
-        local_doc = self._prepare_doc_for_mlcroissant()
-
-        # mlcroissant resolves relative file references against ctx.folder, which
-        # is only populated when loading from a file path. Write the rewritten doc
-        # to a temp file next to the Croissant so resolution succeeds.
-        local_mode = isinstance(self.croissant_fs, LocalFileSystem)
-        if local_mode:
-            tmp_path = os.path.join(self.croissant_dir, ".copick-tmp-metadata.json")
-            try:
-                with open(tmp_path, "w") as tmp:
-                    json.dump(local_doc, tmp)
-                try:
-                    dataset = mlc.Dataset(jsonld=tmp_path)
-                except Exception as e:
-                    raise ValueError(f"Failed to load Croissant at {self._metadata_path}: {e}") from e
-            finally:
-                with contextlib.suppress(OSError):
-                    os.unlink(tmp_path)
-        else:
-            try:
-                dataset = mlc.Dataset(jsonld=local_doc)
-            except Exception as e:
-                raise ValueError(f"Failed to load Croissant at {self._metadata_path}: {e}") from e
-
-        for rs_id, schema in CSV_SCHEMA.items():
-            target = self._get_list_for(rs_id)
-            target.clear() if isinstance(target, list) else target.clear()
-
-            try:
-                records = dataset.records(rs_id)
-            except Exception:
-                # RecordSet may be missing or empty — treat as no rows
-                continue
-
-            types = schema["types"]
-            prefix = rs_id + "/"
-
-            for rec in records:
-                row = {}
-                for col in schema["columns"]:
-                    key = prefix + col
-                    raw = rec.get(key, None)
-                    row[col] = _coerce_cell(raw, types[col])
-                if rs_id == "copick/runs":
-                    if row.get("name"):
-                        self.runs_by_name[row["name"]] = row
-                else:
-                    target.append(row)
+        pass
 
     def _prepare_doc_for_mlcroissant(self) -> Dict[str, Any]:
         """Return a copy of ``self.doc`` with CSV FileObject contentUrls rewritten
@@ -605,25 +465,7 @@ class CroissantIndex:
         ``self.croissant_dir``; for remote Croissants we leave the original
         URLs (mlcroissant handles http/s3 via etils/epath downloading).
         """
-        import copy
-
-        doc = copy.deepcopy(self.doc)
-        distribution = doc.get("distribution", [])
-        # If the Croissant is local on disk, point CSVs at the local dir
-        local_mode = isinstance(self.croissant_fs, LocalFileSystem)
-
-        for entry in distribution:
-            if entry.get("@type") != "cr:FileObject":
-                continue
-            fo_id = entry.get("@id", "")
-            schema_entry = _find_schema_by_file_object_id(fo_id)
-            if schema_entry is None:
-                continue
-            csv_name = schema_entry["csv_name"]
-            if local_mode:
-                local_path = os.path.join(self.croissant_dir, csv_name)
-                entry["contentUrl"] = local_path
-        return doc
+        pass
 
     def _get_list_for(self, recordset_id: str):
         return {
@@ -656,9 +498,6 @@ class CroissantIndex:
     # Write-side API
     # ------------------------------------------------------------------
 
-    def mark_dirty(self, recordset_id: str) -> None:
-        with self._write_lock:
-            self._dirty.add(recordset_id)
 
     def add_row(self, recordset_id: str, row: Dict[str, Any]) -> None:
         schema = CSV_SCHEMA[recordset_id]
@@ -712,21 +551,7 @@ class CroissantIndex:
         Any unflushed dirty state is discarded — callers relying on
         ``batch()``-deferred commits should ``commit()`` before ``reload()``.
         """
-        with self._write_lock:
-            with self.croissant_fs.open(self._metadata_path, "rb") as f:
-                raw = f.read()
-            self.doc = json.loads(raw.decode("utf-8"))
-            self.config_block = self.doc.get("copick:config", {})
-            self.runs_by_name.clear()
-            self.voxel_spacings.clear()
-            self.tomograms.clear()
-            self.features.clear()
-            self.picks.clear()
-            self.meshes.clear()
-            self.segmentations.clear()
-            self.objects.clear()
-            self._dirty.clear()
-            self._load_records()
+        pass
 
     def _commit_locked(self) -> None:
         """Internal commit; caller must hold ``self._write_lock``."""
@@ -829,49 +654,24 @@ class CroissantIndex:
 
     def clear_split(self, run_name: str) -> None:
         """Clear the split assignment for ``run_name``."""
-        self.set_split(run_name, "")
+        pass
 
     def get_all_splits(self) -> Dict[str, List[str]]:
         """Return ``{split_name: [sorted run names]}`` from the current index."""
-        groups: Dict[str, List[str]] = {}
-        for run_name, row in self.runs_by_name.items():
-            val = row.get("split")
-            if not val:
-                continue
-            groups.setdefault(val, []).append(run_name)
-        for names in groups.values():
-            names.sort()
-        return groups
+        pass
 
     # ------------------------------------------------------------------
     # Batch context manager helpers (called by root.batch())
     # ------------------------------------------------------------------
 
-    def defer_commit(self) -> None:
-        self._auto_commit = False
-
-    def resume_commit(self) -> None:
-        self._auto_commit = True
 
 
-def _find_schema_by_file_object_id(fo_id: str) -> Optional[Dict[str, Any]]:
-    for schema in CSV_SCHEMA.values():
-        if schema["file_object_id"] == fo_id:
-            return schema
-    return None
+
 
 
 def _fs_writable(fs: AbstractFileSystem, path: str) -> bool:
     """Best-effort check that ``path`` is writable via ``fs``."""
-    if isinstance(fs, LocalFileSystem):
-        return os.access(path, os.W_OK) if os.path.exists(path) else os.access(os.path.dirname(path) or ".", os.W_OK)
-    # For remote filesystems (s3, http), pessimistically assume not writable unless
-    # overlay is also configured. The caller (CopickRootMLC) handles the fallback.
-    # We can't reliably probe without attempting a write.
-    proto = getattr(fs, "protocol", "")
-    if isinstance(proto, (list, tuple)):
-        proto = proto[0] if proto else ""
-    return proto not in ("http", "https", "github")
+    pass
 
 
 # -----------------------------------------------------------------------------
@@ -957,9 +757,6 @@ class CopickPicksMLC(CopickPicksOverlay):
 
     run: "CopickRunMLC"
 
-    @property
-    def _index(self) -> CroissantIndex:
-        return self.run.root.index
 
     def _find_row(self) -> Optional[Dict[str, Any]]:
         key = {
@@ -973,28 +770,8 @@ class CopickPicksMLC(CopickPicksOverlay):
                 return row
         return None
 
-    @property
-    def path(self) -> str:
-        if self.read_only:
-            row = self._find_row()
-            if row is None:
-                raise FileNotFoundError(f"No Croissant row for pick {self}")
-            return _join_url(self._index.base_url, row["url"])
-        # Writable overlay path
-        return f"{self.run.overlay_path}/Picks/{self.user_id}_{self.session_id}_{self.pickable_object_name}.json"
 
-    @property
-    def directory(self) -> str:
-        if self.read_only:
-            raise RuntimeError("Read-only pick has no writable directory.")
-        return f"{self.run.overlay_path}/Picks/"
 
-    @property
-    def fs(self) -> AbstractFileSystem:
-        if self.read_only:
-            fs, _ = _fs_for_url(self.path, **self._index.static_fs_args)
-            return fs
-        return self.run.fs_overlay
 
     def _load(self) -> CopickPicksFile:
         row = self._find_row()
@@ -1110,9 +887,6 @@ class CopickPicksMLC(CopickPicksOverlay):
 class CopickMeshMLC(CopickMeshOverlay):
     run: "CopickRunMLC"
 
-    @property
-    def _index(self) -> CroissantIndex:
-        return self.run.root.index
 
     def _find_row(self) -> Optional[Dict[str, Any]]:
         key = {
@@ -1126,27 +900,8 @@ class CopickMeshMLC(CopickMeshOverlay):
                 return row
         return None
 
-    @property
-    def path(self) -> str:
-        if self.read_only:
-            row = self._find_row()
-            if row is None:
-                raise FileNotFoundError(f"No Croissant row for mesh {self}")
-            return _join_url(self._index.base_url, row["url"])
-        return f"{self.run.overlay_path}/Meshes/{self.user_id}_{self.session_id}_{self.pickable_object_name}.glb"
 
-    @property
-    def directory(self) -> str:
-        if self.read_only:
-            raise RuntimeError("Read-only mesh has no writable directory.")
-        return f"{self.run.overlay_path}/Meshes/"
 
-    @property
-    def fs(self) -> AbstractFileSystem:
-        if self.read_only:
-            fs, _ = _fs_for_url(self.path, **self._index.static_fs_args)
-            return fs
-        return self.run.fs_overlay
 
     def _load(self) -> "Geometry":
         import trimesh
@@ -1220,9 +975,6 @@ class CopickMeshMLC(CopickMeshOverlay):
 class CopickSegmentationMLC(CopickSegmentationOverlay):
     run: "CopickRunMLC"
 
-    @property
-    def _index(self) -> CroissantIndex:
-        return self.run.root.index
 
     def _find_row(self) -> Optional[Dict[str, Any]]:
         key = {
@@ -1238,27 +990,8 @@ class CopickSegmentationMLC(CopickSegmentationOverlay):
                 return row
         return None
 
-    @property
-    def filename(self) -> str:
-        if self.is_multilabel:
-            return f"{self.voxel_size:.3f}_{self.user_id}_{self.session_id}_{self.name}-multilabel.zarr"
-        return f"{self.voxel_size:.3f}_{self.user_id}_{self.session_id}_{self.name}.zarr"
 
-    @property
-    def path(self) -> str:
-        if self.read_only:
-            row = self._find_row()
-            if row is None:
-                raise FileNotFoundError(f"No Croissant row for segmentation {self}")
-            return _join_url(self._index.base_url, row["url"])
-        return f"{self.run.overlay_path}/Segmentations/{self.filename}"
 
-    @property
-    def fs(self) -> AbstractFileSystem:
-        if self.read_only:
-            fs, _ = _fs_for_url(self.path, **self._index.static_fs_args)
-            return fs
-        return self.run.fs_overlay
 
     def zarr(self) -> zarr.storage.FSStore:
         if self.read_only:
@@ -1326,9 +1059,6 @@ class CopickSegmentationMLC(CopickSegmentationOverlay):
 class CopickFeaturesMLC(CopickFeaturesOverlay):
     tomogram: "CopickTomogramMLC"
 
-    @property
-    def _index(self) -> CroissantIndex:
-        return self.tomogram.voxel_spacing.run.root.index
 
     def _find_row(self) -> Optional[Dict[str, Any]]:
         key = {
@@ -1342,21 +1072,7 @@ class CopickFeaturesMLC(CopickFeaturesOverlay):
                 return row
         return None
 
-    @property
-    def path(self) -> str:
-        if self.read_only:
-            row = self._find_row()
-            if row is None:
-                raise FileNotFoundError(f"No Croissant row for features {self}")
-            return _join_url(self._index.base_url, row["url"])
-        return f"{self.tomogram.overlay_stem}_{self.feature_type}_features.zarr"
 
-    @property
-    def fs(self) -> AbstractFileSystem:
-        if self.read_only:
-            fs, _ = _fs_for_url(self.path, **self._index.static_fs_args)
-            return fs
-        return self.tomogram.fs_overlay
 
     def zarr(self) -> zarr.storage.FSStore:
         if self.read_only:
@@ -1424,9 +1140,6 @@ class CopickTomogramMLC(CopickTomogramOverlay):
     def _feature_factory(self) -> Tuple[Type[CopickFeatures], Type[CopickFeaturesMeta]]:
         return CopickFeaturesMLC, CopickFeaturesMeta
 
-    @property
-    def _index(self) -> CroissantIndex:
-        return self.voxel_spacing.run.root.index
 
     def _find_row(self) -> Optional[Dict[str, Any]]:
         key = {
@@ -1439,100 +1152,14 @@ class CopickTomogramMLC(CopickTomogramOverlay):
                 return row
         return None
 
-    @property
-    def static_path(self) -> str:
-        row = self._find_row()
-        if row is None:
-            return None
-        return _join_url(self._index.base_url, row["url"])
 
-    @property
-    def overlay_path(self) -> str:
-        return f"{self.voxel_spacing.overlay_path}/{self.tomo_type}.zarr"
 
-    @property
-    def static_stem(self) -> str:
-        sp = self.static_path
-        if sp and sp.endswith(".zarr"):
-            return sp[:-5]
-        return sp or ""
 
-    @property
-    def overlay_stem(self) -> str:
-        return f"{self.voxel_spacing.overlay_path}/{self.tomo_type}"
 
-    @property
-    def fs_static(self) -> AbstractFileSystem:
-        sp = self.static_path
-        if sp is None:
-            return None
-        fs, _ = _fs_for_url(sp, **self._index.static_fs_args)
-        return fs
 
-    @property
-    def fs_overlay(self) -> AbstractFileSystem:
-        return self.voxel_spacing.fs_overlay
 
-    @property
-    def static_is_overlay(self) -> bool:
-        return self.voxel_spacing.static_is_overlay
 
-    def _query_static_features(self) -> List[CopickFeaturesMLC]:
-        # When static and overlay point to the same location (Mode A, or
-        # Mode B with overlay_root == base_url), skip the static branch
-        # so artifacts aren't returned twice.
-        if self.static_is_overlay:
-            return []
-        results = []
-        for row in self._index.features:
-            if (
-                row.get("run") == self.voxel_spacing.run.name
-                and row.get("voxel_size") == float(self.voxel_spacing.voxel_size)
-                and row.get("tomo_type") == self.tomo_type
-            ):
-                results.append(
-                    CopickFeaturesMLC(
-                        tomogram=self,
-                        meta=CopickFeaturesMeta(tomo_type=self.tomo_type, feature_type=row["feature_type"]),
-                        read_only=True,
-                    ),
-                )
-        return results
 
-    def _query_overlay_features(self) -> List[CopickFeaturesMLC]:
-        if self.voxel_spacing.run.root.mode == "A":
-            # Mode A: the Croissant index is the authoritative list of writable features.
-            return [
-                CopickFeaturesMLC(
-                    tomogram=self,
-                    meta=CopickFeaturesMeta(tomo_type=self.tomo_type, feature_type=row["feature_type"]),
-                    read_only=False,
-                )
-                for row in self._index.features
-                if row.get("run") == self.voxel_spacing.run.name
-                and row.get("voxel_size") == float(self.voxel_spacing.voxel_size)
-                and row.get("tomo_type") == self.tomo_type
-            ]
-        fs = self.fs_overlay
-        if fs is None:
-            return []
-        feat_loc = self.overlay_path.replace(".zarr", "_")
-        try:
-            paths = fs.glob(feat_loc + "*_features.zarr") + fs.glob(feat_loc + "*_features.zarr/")
-        except FileNotFoundError:
-            return []
-        paths = [p.rstrip("/") for p in paths if fs.isdir(p)]
-        feature_types = [n.replace(feat_loc, "").replace("_features.zarr", "") for n in paths]
-        feature_types = [ft for ft in feature_types if not ft.startswith(".")]
-        feature_types = list(set(feature_types))
-        return [
-            CopickFeaturesMLC(
-                tomogram=self,
-                meta=CopickFeaturesMeta(tomo_type=self.tomo_type, feature_type=ft),
-                read_only=False,
-            )
-            for ft in feature_types
-        ]
 
     def zarr(self) -> zarr.storage.FSStore:
         if self.read_only:
@@ -1597,82 +1224,13 @@ class CopickVoxelSpacingMLC(CopickVoxelSpacingOverlay):
     def _tomogram_factory(self) -> Tuple[Type[CopickTomogramMLC], Type[CopickTomogramMeta]]:
         return CopickTomogramMLC, CopickTomogramMeta
 
-    @property
-    def _index(self) -> CroissantIndex:
-        return self.run.root.index
 
-    @property
-    def static_path(self) -> str:
-        # For display / compatibility
-        return f"{_join_url(self._index.base_url, 'ExperimentRuns')}/{self.run.name}/VoxelSpacing{self.voxel_size:.3f}"
 
-    @property
-    def overlay_path(self) -> str:
-        return f"{self.run.overlay_path}/VoxelSpacing{self.voxel_size:.3f}"
 
-    @property
-    def fs_static(self) -> AbstractFileSystem:
-        fs, _ = _fs_for_url(self.static_path, **self._index.static_fs_args)
-        return fs
 
-    @property
-    def fs_overlay(self) -> AbstractFileSystem:
-        return self.run.fs_overlay
 
-    @property
-    def static_is_overlay(self) -> bool:
-        return self.run.root.static_is_overlay
 
-    def _query_static_tomograms(self) -> List[CopickTomogramMLC]:
-        # When static and overlay point to the same location (Mode A, or
-        # Mode B with overlay_root == base_url), skip the static branch
-        # so artifacts aren't returned twice.
-        if self.static_is_overlay:
-            return []
-        results = []
-        for row in self._index.tomograms:
-            if row.get("run") == self.run.name and row.get("voxel_size") == float(self.voxel_size):
-                results.append(
-                    CopickTomogramMLC(
-                        voxel_spacing=self,
-                        meta=CopickTomogramMeta(tomo_type=row["tomo_type"]),
-                        read_only=True,
-                    ),
-                )
-        return results
 
-    def _query_overlay_tomograms(self) -> List[CopickTomogramMLC]:
-        if self.run.root.mode == "A":
-            # Mode A: the Croissant index is the authoritative list of writable tomograms.
-            return [
-                CopickTomogramMLC(
-                    voxel_spacing=self,
-                    meta=CopickTomogramMeta(tomo_type=row["tomo_type"]),
-                    read_only=False,
-                )
-                for row in self._index.tomograms
-                if row.get("run") == self.run.name and row.get("voxel_size") == float(self.voxel_size)
-            ]
-        fs = self.fs_overlay
-        if fs is None:
-            return []
-        tomo_loc = f"{self.overlay_path}/"
-        try:
-            paths = fs.glob(tomo_loc + "*.zarr") + fs.glob(tomo_loc + "*.zarr/")
-        except FileNotFoundError:
-            return []
-        paths = [p.rstrip("/") for p in paths if fs.isdir(p)]
-        tomo_types = [n.replace(tomo_loc, "").replace(".zarr", "") for n in paths]
-        tomo_types = [t for t in tomo_types if "features" not in t and not t.startswith(".")]
-        tomo_types = list(set(tomo_types))
-        return [
-            CopickTomogramMLC(
-                voxel_spacing=self,
-                meta=CopickTomogramMeta(tomo_type=tt),
-                read_only=False,
-            )
-            for tt in tomo_types
-        ]
 
     def ensure(self, create: bool = False) -> bool:
         exists = any(
@@ -1722,9 +1280,6 @@ class CopickRunMLC(CopickRunOverlay):
     def _segmentation_factory(self) -> Tuple[Type[CopickSegmentationMLC], Type[CopickSegmentationMeta]]:
         return CopickSegmentationMLC, CopickSegmentationMeta
 
-    @property
-    def _index(self) -> CroissantIndex:
-        return self.root.index
 
     # Override the base CopickRun.split property to read/write via the index.
     @property
@@ -1741,84 +1296,14 @@ class CopickRunMLC(CopickRunOverlay):
             )
         self._index.set_split(self.name, value)
 
-    @property
-    def static_path(self) -> str:
-        return f"{_join_url(self.root.index.base_url, 'ExperimentRuns')}/{self.name}"
 
-    @property
-    def overlay_path(self) -> str:
-        if self.root.overlay_base_url:
-            return f"{self.root.overlay_base_url}/ExperimentRuns/{self.name}"
-        # Mode A: overlay == base
-        return f"{self.root.index.base_url}/ExperimentRuns/{self.name}"
 
-    @property
-    def fs_static(self) -> AbstractFileSystem:
-        fs, _ = _fs_for_url(self.static_path, **self._index.static_fs_args)
-        return fs
 
-    @property
-    def fs_overlay(self) -> AbstractFileSystem:
-        return self.root.fs_overlay
 
-    @property
-    def static_is_overlay(self) -> bool:
-        return self.root.static_is_overlay
 
     # ----- static queries: filter index rows by run name -----
 
-    def _query_static_voxel_spacings(self) -> List[CopickVoxelSpacingMLC]:
-        # When static and overlay point to the same location (Mode A, or
-        # Mode B with overlay_root == base_url), skip the static branch
-        # so artifacts aren't returned twice.
-        if self.static_is_overlay:
-            return []
-        results = []
-        seen = set()
-        for row in self._index.voxel_spacings:
-            if row.get("run") == self.name:
-                vs = float(row["voxel_size"])
-                if vs in seen:
-                    continue
-                seen.add(vs)
-                results.append(
-                    CopickVoxelSpacingMLC(
-                        meta=CopickVoxelSpacingMeta(voxel_size=vs),
-                        run=self,
-                    ),
-                )
-        return results
 
-    def _query_overlay_voxel_spacings(self) -> List[CopickVoxelSpacingMLC]:
-        if self.root.mode == "A":
-            # Mode A: the Croissant index is the authoritative list.
-            results = []
-            seen = set()
-            for row in self._index.voxel_spacings:
-                if row.get("run") == self.name:
-                    vs = float(row["voxel_size"])
-                    if vs in seen:
-                        continue
-                    seen.add(vs)
-                    results.append(CopickVoxelSpacingMLC(meta=CopickVoxelSpacingMeta(voxel_size=vs), run=self))
-            return results
-        fs = self.fs_overlay
-        if fs is None:
-            return []
-        loc = f"{self.overlay_path}/VoxelSpacing"
-        try:
-            paths = set(fs.glob(loc + "*") + fs.glob(loc + "*/"))
-        except FileNotFoundError:
-            return []
-        paths = [p.rstrip("/") for p in paths]
-        spacings = []
-        for p in paths:
-            suffix = p[len(loc) :] if p.startswith(loc) else ""
-            try:
-                spacings.append(float(suffix))
-            except ValueError:
-                continue
-        return [CopickVoxelSpacingMLC(meta=CopickVoxelSpacingMeta(voxel_size=s), run=self) for s in spacings]
 
     def _query_static_picks(self) -> List[CopickPicksMLC]:
         # When static and overlay point to the same location (Mode A, or
@@ -1883,153 +1368,9 @@ class CopickRunMLC(CopickRunOverlay):
             )
         return result
 
-    def _query_static_meshes(self) -> List[CopickMeshMLC]:
-        # When static and overlay point to the same location (Mode A, or
-        # Mode B with overlay_root == base_url), skip the static branch
-        # so artifacts aren't returned twice.
-        if self.static_is_overlay:
-            return []
-        results = []
-        for row in self._index.meshes:
-            if row.get("run") == self.name:
-                results.append(
-                    CopickMeshMLC(
-                        run=self,
-                        meta=CopickMeshMeta(
-                            pickable_object_name=row["object_name"],
-                            user_id=row["user_id"],
-                            session_id=row["session_id"],
-                        ),
-                        read_only=True,
-                    ),
-                )
-        return results
 
-    def _query_overlay_meshes(self) -> List[CopickMeshMLC]:
-        if self.root.mode == "A":
-            # Mode A: the Croissant index is the authoritative list of writable meshes.
-            return [
-                CopickMeshMLC(
-                    run=self,
-                    meta=CopickMeshMeta(
-                        pickable_object_name=row["object_name"],
-                        user_id=row["user_id"],
-                        session_id=row["session_id"],
-                    ),
-                    read_only=False,
-                )
-                for row in self._index.meshes
-                if row.get("run") == self.name
-            ]
-        fs = self.fs_overlay
-        if fs is None:
-            return []
-        mesh_loc = f"{self.overlay_path}/Meshes/"
-        try:
-            paths = fs.glob(mesh_loc + "*.glb")
-        except FileNotFoundError:
-            return []
-        names = [p.replace(mesh_loc, "").replace(".glb", "") for p in paths]
-        names = [n for n in names if not n.startswith(".")]
-        result = []
-        for n in names:
-            parts = n.split("_", 2)
-            if len(parts) != 3:
-                continue
-            u, s, o = parts
-            result.append(
-                CopickMeshMLC(
-                    run=self,
-                    meta=CopickMeshMeta(pickable_object_name=o, user_id=u, session_id=s),
-                    read_only=False,
-                ),
-            )
-        return result
 
-    def _query_static_segmentations(self) -> List[CopickSegmentationMLC]:
-        # When static and overlay point to the same location (Mode A, or
-        # Mode B with overlay_root == base_url), skip the static branch
-        # so artifacts aren't returned twice.
-        if self.static_is_overlay:
-            return []
-        results = []
-        for row in self._index.segmentations:
-            if row.get("run") == self.name:
-                results.append(
-                    CopickSegmentationMLC(
-                        run=self,
-                        meta=CopickSegmentationMeta(
-                            is_multilabel=bool(row["is_multilabel"]),
-                            voxel_size=float(row["voxel_size"]),
-                            user_id=row["user_id"],
-                            session_id=row["session_id"],
-                            name=row["name"],
-                        ),
-                        read_only=True,
-                    ),
-                )
-        return results
 
-    def _query_overlay_segmentations(self) -> List[CopickSegmentationMLC]:
-        if self.root.mode == "A":
-            # Mode A: the Croissant index is the authoritative list of writable segmentations.
-            return [
-                CopickSegmentationMLC(
-                    run=self,
-                    meta=CopickSegmentationMeta(
-                        is_multilabel=bool(row["is_multilabel"]),
-                        voxel_size=float(row["voxel_size"]),
-                        user_id=row["user_id"],
-                        session_id=row["session_id"],
-                        name=row["name"],
-                    ),
-                    read_only=False,
-                )
-                for row in self._index.segmentations
-                if row.get("run") == self.name
-            ]
-        fs = self.fs_overlay
-        if fs is None:
-            return []
-        seg_loc = f"{self.overlay_path}/Segmentations/"
-        try:
-            paths = fs.glob(seg_loc + "*.zarr") + fs.glob(seg_loc + "*.zarr/")
-        except FileNotFoundError:
-            return []
-        paths = [p.rstrip("/") for p in paths if fs.isdir(p)]
-        names = [p.replace(seg_loc, "").replace(".zarr", "") for p in paths]
-        names = [n for n in names if not n.startswith(".")]
-        names = list(set(names))
-        result = []
-        for n in names:
-            parts = n.split("_", 3)
-            if len(parts) < 4:
-                continue
-            vs, u, s, rest = parts
-            try:
-                vs_f = float(vs)
-            except ValueError:
-                continue
-            if rest.endswith("-multilabel"):
-                nm = rest[: -len("-multilabel")]
-                ml = True
-            else:
-                nm = rest
-                ml = False
-            result.append(
-                CopickSegmentationMLC(
-                    run=self,
-                    meta=CopickSegmentationMeta(
-                        is_multilabel=ml,
-                        voxel_size=vs_f,
-                        user_id=u,
-                        session_id=s,
-                        name=nm,
-                    ),
-                    read_only=False,
-                ),
-            )
-        return result
 
     def ensure(self, create: bool = False) -> bool:
         exists = self.name in self._index.runs_by_name
@@ -2064,9 +1405,6 @@ class CopickRunMLC(CopickRunOverlay):
 class CopickObjectMLC(CopickObjectOverlay):
     root: "CopickRootMLC"
 
-    @property
-    def _index(self) -> CroissantIndex:
-        return self.root.index
 
     def _find_row(self) -> Optional[Dict[str, Any]]:
         for row in self._index.objects:
@@ -2074,30 +1412,9 @@ class CopickObjectMLC(CopickObjectOverlay):
                 return row
         return None
 
-    @property
-    def static_path(self) -> Optional[str]:
-        row = self._find_row()
-        if row is None:
-            return None
-        return _join_url(self._index.base_url, row["url"])
 
-    @property
-    def overlay_path(self) -> str:
-        if self.root.overlay_base_url:
-            return f"{self.root.overlay_base_url}/Objects/{self.name}.zarr"
-        return f"{self.root.index.base_url}/Objects/{self.name}.zarr"
 
-    @property
-    def fs_static(self) -> AbstractFileSystem:
-        sp = self.static_path
-        if sp is None:
-            return None
-        fs, _ = _fs_for_url(sp, **self._index.static_fs_args)
-        return fs
 
-    @property
-    def fs_overlay(self) -> AbstractFileSystem:
-        return self.root.fs_overlay
 
     def zarr(self) -> Union[None, zarr.storage.FSStore]:
         if not self.is_particle:
@@ -2218,9 +1535,6 @@ class CopickRootMLC(CopickRoot):
             data = json.load(f)
         return cls(CopickConfigMLCroissant(**data))
 
-    @property
-    def mode(self) -> str:
-        return "B" if self.overlay_base_url else "A"
 
     def _assert_writable(self) -> None:
         """Raise ``PermissionError`` if Mode A is set against a read-only base URL.
@@ -2251,11 +1565,7 @@ class CopickRootMLC(CopickRoot):
         ``base_url``. Query methods consult this to avoid returning each
         artifact twice (once from the CSV index, once from the overlay glob).
         """
-        if self.overlay_base_url is None:
-            return True
-        if not self.static_base_url:
-            return False
-        return self.static_base_url == self.overlay_base_url
+        pass
 
     # ----- Factories -----
     def _run_factory(self) -> Tuple[Type[CopickRunMLC], Type[CopickRunMeta]]:
@@ -2265,42 +1575,7 @@ class CopickRootMLC(CopickRoot):
         return CopickObjectMLC, PickableObject
 
     # ----- Queries -----
-    def query(self) -> List[CopickRunMLC]:
-        names = set(self.index.runs_by_name.keys())
 
-        # Mode B: also discover runs that exist only in the overlay (created
-        # locally after the Croissant was produced) via a glob under
-        # ExperimentRuns/.
-        if self.mode == "B" and self.overlay_base_url:
-            run_dir = f"{self.overlay_base_url}/ExperimentRuns/"
-            try:
-                entries = self.fs_overlay.glob(run_dir + "*") + self.fs_overlay.glob(run_dir + "*/")
-            except FileNotFoundError:
-                entries = []
-            for entry in entries:
-                stripped = entry.rstrip("/")
-                name = stripped.rsplit("/", 1)[-1]
-                if name and not name.startswith("."):
-                    names.add(name)
-
-        runs = []
-        for name in sorted(names):
-            runs.append(CopickRunMLC(root=self, meta=CopickRunMeta(name=name)))
-        return runs
-
-    def _query_objects(self):
-        clz, _ = self._object_factory()
-        objects = []
-        static_names = {row["name"] for row in self.index.objects}
-        for obj_meta in self.config.pickable_objects:
-            if self.mode == "A":
-                read_only = False
-            else:
-                # Mode B: object is read-only if present in static only.
-                overlay_exists = self.fs_overlay.exists(f"{self.overlay_base_url}/Objects/{obj_meta.name}.zarr")
-                read_only = obj_meta.name in static_names and not overlay_exists
-            objects.append(clz(self, obj_meta, read_only=read_only))
-        self._objects = objects
 
     # ----- Sync controls -----
     def sync(self) -> None:
@@ -2316,19 +1591,17 @@ class CopickRootMLC(CopickRoot):
         an in-process ``copick sync`` CLI invocation — call ``refresh()``
         on the original root to pick up those changes.
         """
-        self.index.reload()
-        super().refresh()
+        pass
 
     # ----- Splits -----
     @property
     def splits(self) -> Dict[str, List[str]]:
         """Return ``{split_name: [run names]}`` from the Croissant index."""
-        return self.index.get_all_splits()
+        pass
 
     def get_runs_in_split(self, split_name: str) -> List["CopickRunMLC"]:
         """Return all runs currently assigned to ``split_name``."""
-        names = self.splits.get(split_name, [])
-        return [r for r in (self.get_run(n) for n in names) if r is not None]
+        pass
 
     def set_splits(
         self,
@@ -2343,30 +1616,13 @@ class CopickRootMLC(CopickRoot):
         existing splits are preserved for runs not mentioned in ``mapping``.
         All writes coalesce into a single commit via :meth:`batch`.
         """
-        if self.mode == "B":
-            raise PermissionError(
-                "Splits are stored in the Croissant's runs.csv; Mode B is read-only.",
-            )
-        with self.batch():
-            if clear_existing:
-                for run_name in list(self.index.runs_by_name.keys()):
-                    self.index.set_split(run_name, "")
-            for split_name, runs in mapping.items():
-                for run_name in runs:
-                    self.index.set_split(run_name, split_name)
+        pass
 
     def clear_splits(self, runs: Optional[Any] = None) -> None:
         """Clear split assignment for ``runs`` (iterable) or for every run
         if ``runs`` is ``None``. All writes coalesce into a single commit.
         """
-        if self.mode == "B":
-            raise PermissionError(
-                "Splits are stored in the Croissant's runs.csv; Mode B is read-only.",
-            )
-        target = list(runs) if runs is not None else list(self.index.runs_by_name.keys())
-        with self.batch():
-            for name in target:
-                self.index.set_split(name, "")
+        pass
 
     class _BatchCtx:
         def __init__(self, root: "CopickRootMLC"):
@@ -2389,8 +1645,5 @@ class CopickRootMLC(CopickRoot):
                 for ...:
                     run.new_picks(...).store()
         """
-        return CopickRootMLC._BatchCtx(self)
+        pass
 
-    def reconnect(self) -> None:
-        if hasattr(self.fs_overlay, "_reconnect"):
-            self.fs_overlay._reconnect()

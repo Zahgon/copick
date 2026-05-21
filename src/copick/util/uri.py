@@ -570,12 +570,7 @@ def _is_pattern(value: str, pattern_type: str) -> bool:
     Returns:
         bool: True if the value is a pattern that requires matching.
     """
-    if value == "*":
-        return True
-    if pattern_type == "regex":
-        return True  # Regex is always treated as a pattern
-    # Check for glob wildcards
-    return "*" in value or "?" in value or "[" in value
+    pass
 
 
 def _matches_pattern(value: str, pattern: str, pattern_type: str) -> bool:
@@ -631,40 +626,7 @@ def _get_picks_from_runs(
     Returns:
         List of matching picks.
     """
-    results = []
-    pattern_type = filters.get("pattern_type", "glob")
-    object_name = filters.get("object_name")
-    user_id = filters.get("user_id")
-    session_id = filters.get("session_id")
-
-    # Check if we can use the built-in get_picks method (no patterns)
-    use_builtin = (
-        not (object_name and _is_pattern(object_name, pattern_type))
-        and not (user_id and _is_pattern(user_id, pattern_type))
-        and not (session_id and _is_pattern(session_id, pattern_type))
-    )
-
-    if use_builtin:
-        # Use the built-in filtering - much cleaner!
-        for run in runs:
-            picks = run.get_picks(
-                object_name=None if object_name == "*" else object_name,
-                user_id=None if user_id == "*" else user_id,
-                session_id=None if session_id == "*" else session_id,
-            )
-            results.extend(picks)
-    else:
-        # Need pattern matching
-        for run in runs:
-            for pick in run.picks:
-                if (
-                    (not object_name or _matches_pattern(pick.pickable_object_name, object_name, pattern_type))
-                    and (not user_id or _matches_pattern(pick.user_id, user_id, pattern_type))
-                    and (not session_id or _matches_pattern(pick.session_id, session_id, pattern_type))
-                ):
-                    results.append(pick)
-
-    return results
+    pass
 
 
 def _get_meshes_from_runs(
@@ -680,40 +642,7 @@ def _get_meshes_from_runs(
     Returns:
         List of matching meshes.
     """
-    results = []
-    pattern_type = filters.get("pattern_type", "glob")
-    object_name = filters.get("object_name")
-    user_id = filters.get("user_id")
-    session_id = filters.get("session_id")
-
-    # Check if we can use the built-in get_meshes method (no patterns)
-    use_builtin = (
-        not (object_name and _is_pattern(object_name, pattern_type))
-        and not (user_id and _is_pattern(user_id, pattern_type))
-        and not (session_id and _is_pattern(session_id, pattern_type))
-    )
-
-    if use_builtin:
-        # Use the built-in filtering
-        for run in runs:
-            meshes = run.get_meshes(
-                object_name=None if object_name == "*" else object_name,
-                user_id=None if user_id == "*" else user_id,
-                session_id=None if session_id == "*" else session_id,
-            )
-            results.extend(meshes)
-    else:
-        # Need pattern matching
-        for run in runs:
-            for mesh in run.meshes:
-                if (
-                    (not object_name or _matches_pattern(mesh.pickable_object_name, object_name, pattern_type))
-                    and (not user_id or _matches_pattern(mesh.user_id, user_id, pattern_type))
-                    and (not session_id or _matches_pattern(mesh.session_id, session_id, pattern_type))
-                ):
-                    results.append(mesh)
-
-    return results
+    pass
 
 
 def _get_segmentations_from_runs(
@@ -729,55 +658,7 @@ def _get_segmentations_from_runs(
     Returns:
         List of matching segmentations.
     """
-    results = []
-    pattern_type = filters.get("pattern_type", "glob")
-    name = filters.get("name")
-    user_id = filters.get("user_id")
-    session_id = filters.get("session_id")
-    voxel_spacing = filters.get("voxel_spacing")
-    multilabel = filters.get("multilabel")
-
-    # Check if we need pattern matching
-    use_builtin = (
-        not (name and _is_pattern(name, pattern_type))
-        and not (user_id and _is_pattern(user_id, pattern_type))
-        and not (session_id and _is_pattern(session_id, pattern_type))
-        and not (voxel_spacing and isinstance(voxel_spacing, str) and _is_pattern(voxel_spacing, pattern_type))
-    )
-
-    if use_builtin:
-        # Use built-in filtering
-        for run in runs:
-            # Convert voxel_spacing to float if it's not a wildcard
-            vs_value = None
-            if voxel_spacing and voxel_spacing != "*":
-                try:
-                    vs_value = float(voxel_spacing)
-                except (ValueError, TypeError):
-                    vs_value = None
-
-            segs = run.get_segmentations(
-                name=None if name == "*" else name,
-                user_id=None if user_id == "*" else user_id,
-                session_id=None if session_id == "*" else session_id,
-                is_multilabel=multilabel,
-                voxel_size=vs_value,
-            )
-            results.extend(segs)
-    else:
-        # Pattern matching needed
-        for run in runs:
-            for seg in run.segmentations:
-                if (
-                    (not name or _matches_pattern(seg.name, name, pattern_type))
-                    and (not user_id or _matches_pattern(seg.user_id, user_id, pattern_type))
-                    and (not session_id or _matches_pattern(seg.session_id, session_id, pattern_type))
-                    and (not voxel_spacing or _matches_numeric_pattern(seg.voxel_size, voxel_spacing, pattern_type))
-                    and (multilabel is None or seg.is_multilabel == multilabel)
-                ):
-                    results.append(seg)
-
-    return results
+    pass
 
 
 def _get_tomograms_from_runs(
@@ -793,30 +674,7 @@ def _get_tomograms_from_runs(
     Returns:
         List of matching tomograms.
     """
-    results = []
-    pattern_type = filters.get("pattern_type", "glob")
-    tomo_type = filters.get("tomo_type")
-    voxel_spacing = filters.get("voxel_spacing")
-
-    for run in runs:
-        for vs in run.voxel_spacings:
-            # Skip if voxel_spacing filter doesn't match
-            if voxel_spacing and not _matches_numeric_pattern(vs.voxel_size, voxel_spacing, pattern_type):
-                continue
-
-            # Get tomograms (use built-in method if not a pattern)
-            if tomo_type and not _is_pattern(tomo_type, pattern_type):
-                # Exact match - use built-in get_tomograms
-                tomos = vs.get_tomograms(tomo_type)
-            else:
-                # Need pattern matching or get all
-                tomos = [
-                    t for t in vs.tomograms if not tomo_type or _matches_pattern(t.tomo_type, tomo_type, pattern_type)
-                ]
-
-            results.extend(tomos)
-
-    return results
+    pass
 
 
 def _get_features_from_runs(
@@ -832,42 +690,4 @@ def _get_features_from_runs(
     Returns:
         List of matching features.
     """
-    results = []
-    pattern_type = filters.get("pattern_type", "glob")
-    tomo_type = filters.get("tomo_type")
-    voxel_spacing = filters.get("voxel_spacing")
-    feature_type = filters.get("feature_type")
-
-    for run in runs:
-        for vs in run.voxel_spacings:
-            # Skip if voxel_spacing filter doesn't match
-            if voxel_spacing and not _matches_numeric_pattern(vs.voxel_size, voxel_spacing, pattern_type):
-                continue
-
-            # Get tomograms (use built-in method if not a pattern)
-            if tomo_type and not _is_pattern(tomo_type, pattern_type):
-                # Exact match - use built-in get_tomograms
-                tomos = vs.get_tomograms(tomo_type)
-            else:
-                # Need pattern matching or get all
-                tomos = [
-                    t for t in vs.tomograms if not tomo_type or _matches_pattern(t.tomo_type, tomo_type, pattern_type)
-                ]
-
-            for tomo in tomos:
-                # Get features (use built-in method if not a pattern)
-                if feature_type and not _is_pattern(feature_type, pattern_type):
-                    # Exact match
-                    feat = tomo.get_features(feature_type)
-                    if feat:
-                        results.append(feat)
-                else:
-                    # Pattern matching or get all
-                    features = [
-                        f
-                        for f in tomo.features
-                        if not feature_type or _matches_pattern(f.feature_type, feature_type, pattern_type)
-                    ]
-                    results.extend(features)
-
-    return results
+    pass

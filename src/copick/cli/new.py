@@ -136,13 +136,4 @@ def voxelspacing(
 
     VOXEL_SPACING: The voxel spacing in Angstrom to be added to the run.
     """
-    # Deferred import for performance
-    import copick
-    from copick.ops.add import add_voxelspacing
-
-    get_logger(__name__, debug=debug)
-
-    root = copick.from_file(config)
-    add_voxelspacing(root, run, voxel_spacing, create=create, exist_ok=overwrite, log=debug)
-
-    return 0
+    pass

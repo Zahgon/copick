@@ -44,46 +44,7 @@ def _get_file_path(obj: Union[CopickPicks, CopickMesh, CopickSegmentation, Copic
     Raises:
         ValueError: If the object is read-only from the data portal and cannot be symlinked.
     """
-    # FSSpec objects - straightforward path access
-    if isinstance(obj, (CopickPicksFSSpec, CopickMeshFSSpec, CopickSegmentationFSSpec)):
-        return obj.path
-    elif isinstance(obj, CopickTomogramFSSpec):
-        # For FSSpec tomograms, use static_path if read-only, overlay_path otherwise
-        return obj.static_path if obj.read_only else obj.overlay_path
-    elif isinstance(obj, CopickFeaturesFSSpec):
-        return obj.path
-
-    # CDP objects - need to check if they're writable
-    elif isinstance(obj, (CopickPicksCDP, CopickSegmentationCDP)):
-        if obj.read_only:
-            raise ValueError(
-                f"Cannot symlink read-only data portal object: {obj}. "
-                "Data portal objects must be in the overlay to be deposited.",
-            )
-        return obj.path
-    elif isinstance(obj, CopickMeshCDP):
-        if obj.read_only:
-            raise ValueError(
-                "Cannot symlink read-only data portal mesh. "
-                "Data portal does not store meshes on the portal; they must be in the overlay.",
-            )
-        return obj.path
-    elif isinstance(obj, CopickTomogramCDP):
-        if obj.read_only:
-            raise ValueError(
-                f"Cannot symlink read-only data portal tomogram: {obj}. "
-                "Portal tomograms must be downloaded to overlay first to be deposited.",
-            )
-        return obj.overlay_path
-    elif isinstance(obj, CopickFeaturesCDP):
-        if obj.read_only:
-            raise ValueError(
-                "Cannot symlink read-only data portal features. Data portal does not support features yet.",
-            )
-        return obj.path
-
-    else:
-        raise TypeError(f"Unknown copick object type: {type(obj).__name__}")
+    pass
 
 
 def _create_symlink(source: str, target: str) -> None:
@@ -93,26 +54,7 @@ def _create_symlink(source: str, target: str) -> None:
         source: The source path to link to.
         target: The target path for the symlink.
     """
-    target_path = Path(target)
-
-    # Create parent directories if they don't exist
-    target_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Skip if symlink already exists and points to the same source
-    if target_path.is_symlink():
-        if os.readlink(target_path) == source:
-            return
-        else:
-            logger.warning(f"Symlink {target} already exists pointing to {os.readlink(target_path)}, skipping")
-            return
-
-    # Skip if a file/directory already exists at target
-    if target_path.exists():
-        logger.warning(f"File or directory {target} already exists, skipping")
-        return
-
-    # Create the symlink
-    os.symlink(source, target)
+    pass
 
 
 def deposit_run(
@@ -145,106 +87,7 @@ def deposit_run(
             - "processed": Number of objects successfully symlinked
             - "errors": List of error messages
     """
-    processed = 0
-    errors = []
-
-    # Determine the run name, applying regex if provided
-    output_run_name = run.name
-    if run_name_regex:
-        # Match run name with regex
-        match = re.search(run_name_regex, run.name)
-        if match:
-            output_run_name = match.group(1)
-        else:
-            if logger:
-                logger.error(f"Run name {run.name} does not match regex {run_name_regex}.")
-            raise ValueError(f"Run name {run.name} does not match regex {run_name_regex}.")
-
-    # Construct the prefixed run name
-    prefixed_run_name = f"{run_name_prefix}{output_run_name}"
-    run_dir = Path(target_dir) / "ExperimentRuns" / prefixed_run_name
-
-    # Process picks
-    if picks_uris is not None:
-        for uri in picks_uris:
-            try:
-                picks_list = resolve_copick_objects(uri, run.root, "picks", run.name)
-                for pick in picks_list:
-                    source = _get_file_path(pick)
-                    filename = f"{pick.user_id}_{pick.session_id}_{pick.pickable_object_name}.json"
-                    target = run_dir / "Picks" / filename
-                    _create_symlink(source, str(target))
-                    processed += 1
-            except Exception as e:
-                errors.append(f"Error processing picks URI '{uri}': {e}")
-                logger.error(f"Error processing picks URI '{uri}'", exc_info=e)
-
-    # Process meshes
-    if meshes_uris is not None:
-        for uri in meshes_uris:
-            try:
-                meshes_list = resolve_copick_objects(uri, run.root, "mesh", run.name)
-                for mesh in meshes_list:
-                    source = _get_file_path(mesh)
-                    filename = f"{mesh.user_id}_{mesh.session_id}_{mesh.pickable_object_name}.glb"
-                    target = run_dir / "Meshes" / filename
-                    _create_symlink(source, str(target))
-                    processed += 1
-            except Exception as e:
-                errors.append(f"Error processing meshes URI '{uri}': {e}")
-                logger.error(f"Error processing meshes URI '{uri}'", exc_info=e)
-
-    # Process segmentations
-    if segmentations_uris is not None:
-        for uri in segmentations_uris:
-            try:
-                segs_list = resolve_copick_objects(uri, run.root, "segmentation", run.name)
-                for seg in segs_list:
-                    source = _get_file_path(seg)
-                    if seg.is_multilabel:
-                        filename = f"{seg.voxel_size:.3f}_{seg.user_id}_{seg.session_id}_{seg.name}-multilabel.zarr"
-                    else:
-                        filename = f"{seg.voxel_size:.3f}_{seg.user_id}_{seg.session_id}_{seg.name}.zarr"
-                    target = run_dir / "Segmentations" / filename
-                    _create_symlink(source, str(target))
-                    processed += 1
-            except Exception as e:
-                errors.append(f"Error processing segmentations URI '{uri}': {e}")
-                logger.error(f"Error processing segmentations URI '{uri}'", exc_info=e)
-
-    # Process tomograms
-    if tomograms_uris is not None:
-        for uri in tomograms_uris:
-            try:
-                tomos_list = resolve_copick_objects(uri, run.root, "tomogram", run.name)
-                for tomo in tomos_list:
-                    source = _get_file_path(tomo)
-                    voxel_dir = f"VoxelSpacing{tomo.voxel_spacing.voxel_size:.3f}"
-                    filename = f"{tomo.tomo_type}.zarr"
-                    target = run_dir / voxel_dir / filename
-                    _create_symlink(source, str(target))
-                    processed += 1
-            except Exception as e:
-                errors.append(f"Error processing tomograms URI '{uri}': {e}")
-                logger.error(f"Error processing tomograms URI '{uri}'", exc_info=e)
-
-    # Process features
-    if features_uris is not None:
-        for uri in features_uris:
-            try:
-                features_list = resolve_copick_objects(uri, run.root, "feature", run.name)
-                for feature in features_list:
-                    source = _get_file_path(feature)
-                    voxel_dir = f"VoxelSpacing{feature.tomogram.voxel_spacing.voxel_size:.3f}"
-                    filename = f"{feature.tomo_type}_{feature.feature_type}_features.zarr"
-                    target = run_dir / voxel_dir / filename
-                    _create_symlink(source, str(target))
-                    processed += 1
-            except Exception as e:
-                errors.append(f"Error processing features URI '{uri}': {e}")
-                logger.error(f"Error processing features URI '{uri}'", exc_info=e)
-
-    return {"processed": processed, "errors": errors}
+    pass
 
 
 def deposit(

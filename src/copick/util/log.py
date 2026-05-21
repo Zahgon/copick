@@ -17,9 +17,6 @@ class _ThirdPartyPathFilter(logging.Filter):
         "/numexpr/",
     )
 
-    def filter(self, record: logging.LogRecord) -> bool:
-        pathname = getattr(record, "pathname", "") or ""
-        return not any(frag in pathname for frag in self._NOISY_PATH_FRAGMENTS)
 
 
 def get_logger(

@@ -173,13 +173,7 @@ class CopickTomogramOverlay(CopickTomogram):
         Returns:
             List[CopickFeaturesOverlay]: List of features from both sources.
         """
-        static = self._query_static_features()
-        overlay = self._query_overlay_features()
-
-        for f in static:
-            assert f.read_only, "Features from static source must be read-only."
-
-        return static + overlay
+        pass
 
     def delete(self) -> None:
         """Delete the tomogram, making sure the source is writable."""
@@ -216,13 +210,7 @@ class CopickVoxelSpacingOverlay(CopickVoxelSpacing):
         Returns:
             List[CopickTomogramOverlay]: List of tomograms from both sources.
         """
-        static = self._query_static_tomograms()
-        overlay = self._query_overlay_tomograms()
-
-        for t in static:
-            assert t.read_only, "Tomograms from static source must be read-only."
-
-        return static + overlay
+        pass
 
 
 class CopickRunOverlay(CopickRun):
@@ -252,14 +240,7 @@ class CopickRunOverlay(CopickRun):
         Returns:
             List[CopickVoxelSpacingOverlay]: List of voxel spacings from both sources.
         """
-        static = self._query_static_voxel_spacings()
-        overlay = self._query_overlay_voxel_spacings()
-
-        # Remove overlay voxel spacings that are already in the static source.
-        sspacings = [v.voxel_size for v in static]
-        overlay = [v for v in overlay if v.voxel_size not in sspacings]
-
-        return static + overlay
+        pass
 
     def _query_static_picks(self) -> List[CopickPicksOverlay]:
         """Override to query the static source for the picks. All returned picks must be read-only.
@@ -313,13 +294,7 @@ class CopickRunOverlay(CopickRun):
         Returns:
             List[CopickMeshOverlay]: List of meshes from both sources.
         """
-        static = self._query_static_meshes()
-        overlay = self._query_overlay_meshes()
-
-        for m in static:
-            assert m.read_only, "Meshes from static source must be read-only."
-
-        return static + overlay
+        pass
 
     def _query_static_segmentations(self) -> List[CopickSegmentationOverlay]:
         """Override to query the static source for the segmentations. All returned segmentations must be read-only.
@@ -343,10 +318,4 @@ class CopickRunOverlay(CopickRun):
         Returns:
             List[CopickSegmentationOverlay]: List of segmentations from both sources.
         """
-        static = self._query_static_segmentations()
-        overlay = self._query_overlay_segmentations()
-
-        for s in static:
-            assert s.read_only, "Segmentations from static source must be read-only."
-
-        return static + overlay
+        pass

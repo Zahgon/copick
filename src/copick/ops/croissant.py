@@ -1150,13 +1150,7 @@ def _abs_csv_url(base_url: str, rel: str) -> str:
 
 def _source_base_url_for_root(source_root: CopickRoot) -> str:
     """Return the base URL that relative URL values in the walk are relative to."""
-    source_type = getattr(source_root.config, "config_type", "filesystem")
-    if source_type == "cryoet_data_portal":
-        return CDP_PORTAL_BASE_URL
-    if source_type == "mlcroissant":
-        return getattr(source_root.index, "base_url", "") or ""
-    cfg = source_root.config
-    return getattr(cfg, "static_root", None) or getattr(cfg, "overlay_root", "") or ""
+    pass
 
 
 def _absolutize_row_urls(rows: Dict[str, List[Dict[str, Any]]], base_url: str) -> None:
@@ -1167,18 +1161,7 @@ def _absolutize_row_urls(rows: Dict[str, List[Dict[str, Any]]], base_url: str) -
     a different ``copick:baseUrl``), we promote everything to absolute so the
     destination CSV is self-sufficient.
     """
-    from copick.impl.mlcroissant import _join_url
-
-    if not base_url:
-        return
-    for rs_id, row_list in rows.items():
-        schema = CSV_SCHEMA[rs_id]
-        if "url" not in schema["columns"]:
-            continue
-        for row in row_list:
-            url = row.get("url")
-            if url:
-                row["url"] = _join_url(base_url, url)
+    pass
 
 
 def _union_pickable_objects(
@@ -1196,45 +1179,7 @@ def _union_pickable_objects(
     Applies ``object_name_map`` to source object names and records the original
     portal name in ``metadata["portal_original_name"]`` (idempotent).
     """
-    cfg_block = dest_index.config_block
-    if not isinstance(cfg_block, dict):
-        return
-    existing = cfg_block.setdefault("pickable_objects", [])
-    existing_by_name = {po.get("name"): po for po in existing}
-
-    for po in source_root.config.pickable_objects:
-        po_dump = po.model_dump()
-        src_name = po_dump.get("name")
-        if object_name_map and src_name in object_name_map:
-            new_name = object_name_map[src_name]
-            if new_name != src_name:
-                po_dump["name"] = new_name
-                md = po_dump.get("metadata") or {}
-                md.setdefault("portal_original_name", src_name)
-                po_dump["metadata"] = md
-
-        name = po_dump.get("name")
-        if name in existing_by_name:
-            dest_entry = existing_by_name[name]
-            # Normalize via JSON round-trip so tuple-vs-list drift (from
-            # model_dump vs. JSON-loaded dicts) doesn't fire a false positive.
-            dest_norm = json.loads(json.dumps(dest_entry, default=list))
-            src_norm = json.loads(json.dumps(po_dump, default=list))
-            if dest_norm.get("label") != src_norm.get("label") or dest_norm.get("color") != src_norm.get("color"):
-                logger.warning(
-                    f"Pickable object '{name}' already present in destination with "
-                    f"different attributes; destination wins.",
-                )
-            continue
-        existing.append(po_dump)
-        existing_by_name[name] = po_dump
-
-    cfg_block["pickable_objects"] = existing
-    dest_index.doc["copick:config"] = cfg_block
-    # Mark metadata.json dirty indirectly — committing any CSV flushes the doc.
-    # Add all currently dirty recordsets plus a "runs" no-op so metadata.json
-    # is rewritten even when no recordset is dirty.
-    dest_index.mark_dirty("copick/runs")
+    pass
 
 
 def append_croissant(
@@ -1289,78 +1234,7 @@ def append_croissant(
     Returns:
         The path to the destination ``metadata.json``.
     """
-    from copick.impl.mlcroissant import CopickConfigMLCroissant, CopickRootMLC
-
-    filters = _ExportFilters(
-        runs=list(runs) if runs is not None else None,
-        tomograms=list(tomograms) if tomograms is not None else None,
-        features=list(features) if features is not None else None,
-        picks=list(picks) if picks is not None else None,
-        meshes=list(meshes) if meshes is not None else None,
-        segmentations=list(segmentations) if segmentations is not None else None,
-        objects=list(objects) if objects is not None else None,
-        tomo_type_map=dict(tomo_type_map) if tomo_type_map else None,
-        object_name_map=dict(object_name_map) if object_name_map else None,
-        session_id_template=session_id_template or None,
-        picks_portal_meta=dict(picks_portal_meta) if picks_portal_meta else None,
-        picks_author=list(picks_author) if picks_author else None,
-        segmentations_portal_meta=dict(segmentations_portal_meta) if segmentations_portal_meta else None,
-        segmentations_author=list(segmentations_author) if segmentations_author else None,
-        tomograms_portal_meta=dict(tomograms_portal_meta) if tomograms_portal_meta else None,
-        tomograms_author=list(tomograms_author) if tomograms_author else None,
-    )
-
-    source_type = getattr(source_root.config, "config_type", "filesystem")
-    _validate_filters_against_source(filters, source_type)
-
-    # Open destination in Mode A. pickable_objects are populated by
-    # CopickRootMLC.__init__ from the Croissant's copick:config block.
-    dest_cfg = CopickConfigMLCroissant(croissant_url=dest_metadata_path, pickable_objects=[])
-    dest = CopickRootMLC(dest_cfg)
-    if not dest.index._writable:
-        raise PermissionError(
-            f"Destination Croissant at {dest_metadata_path} is not writable. "
-            "Append requires a Mode A (writable copick:baseUrl) destination.",
-        )
-
-    # Walk source rows using the source's native base URL so URL helpers
-    # produce consistent relative paths, then absolutize for the destination.
-    source_base_url = _source_base_url_for_root(source_root)
-    rows = _walk_project(
-        source_root,
-        source_base_url,
-        source_type=source_type,
-        compute_file_sha256=compute_file_sha256,
-        filters=filters,
-    )
-    _absolutize_row_urls(rows, source_base_url)
-
-    # Apply split assignments to the appended run rows. Explicit overrides
-    # from ``splits`` kwarg win; otherwise preserve any existing split the
-    # destination already has for this run (so a data-only append doesn't
-    # silently clobber splits set via a prior invocation).
-    run_to_split = _load_split_assignments(splits)
-    if run_to_split:
-        available = {r["name"] for r in rows.get("copick/runs", [])}
-        _validate_split_runs(run_to_split, available)
-    for run_row in rows.get("copick/runs", []):
-        name = run_row["name"]
-        if name in run_to_split:
-            run_row["split"] = run_to_split[name]
-        else:
-            existing = dest.index.get_split(name)
-            if existing is not None:
-                run_row["split"] = existing
-
-    # Merge rows + pickable_objects into the destination in one commit.
-    with dest.batch():
-        for rs_id in RECORDSET_ORDER:
-            for row in rows[rs_id]:
-                dest.index.add_row(rs_id, row)
-        _union_pickable_objects(dest.index, source_root, filters.object_name_map)
-
-    logger.info(f"Appended {sum(len(v) for v in rows.values())} rows into {dest_metadata_path}")
-    return dest_metadata_path
+    pass
 
 
 def set_splits(
@@ -1389,35 +1263,7 @@ def set_splits(
     Returns:
         The path to the rewritten ``metadata.json``.
     """
-    from copick.impl.mlcroissant import CopickConfigMLCroissant, CopickRootMLC
-
-    dest_cfg = CopickConfigMLCroissant(croissant_url=dest_metadata_path, pickable_objects=[])
-    dest = CopickRootMLC(dest_cfg)
-    if not dest.index._writable:
-        raise PermissionError(
-            f"Destination Croissant at {dest_metadata_path} is not writable. "
-            "set_splits requires a Mode A (writable copick:baseUrl) destination.",
-        )
-
-    run_to_split = _load_split_assignments(mapping) if mapping else {}
-    unassign_list = list(unassign) if unassign else []
-    available = set(dest.index.runs_by_name.keys())
-    _validate_split_runs(run_to_split, available)
-    unknown_unassign = [r for r in unassign_list if r not in available]
-    if unknown_unassign:
-        raise ValueError(f"Unassign references unknown runs: {sorted(unknown_unassign)}")
-
-    with dest.batch():
-        if clear_existing:
-            for name in list(dest.index.runs_by_name.keys()):
-                dest.index.set_split(name, "")
-        for run_name, split_name in run_to_split.items():
-            dest.index.set_split(run_name, split_name)
-        for run_name in unassign_list:
-            dest.index.set_split(run_name, "")
-
-    logger.info(f"Updated splits in {dest_metadata_path}")
-    return dest_metadata_path
+    pass
 
 
 # -----------------------------------------------------------------------------

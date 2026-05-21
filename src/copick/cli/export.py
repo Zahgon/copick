@@ -264,34 +264,7 @@ def tomogram(
         --output-dir ./output --output-format mrc --level 1 \\
         --run-names "TS_001,TS_002"
     """
-    from copick.ops.export import export as export_op
-
-    logger = get_logger(__name__, debug=debug)
-
-    # Parse run names
-    run_names_list = None
-    if run_names:
-        run_names_list = [name.strip() for name in run_names.split(",") if name.strip()]
-
-    # Handle compression
-    compression_value = compression if compression and compression.lower() != "none" else None
-
-    try:
-        export_op(
-            config=config,
-            output_dir=output_dir,
-            run_names=run_names_list,
-            tomogram_uri=tomogram_uri,
-            output_format=output_format,
-            level=level,
-            compression=compression_value,
-            n_workers=max_workers,
-            log=debug,
-        )
-        logger.info("Export completed successfully.")
-    except Exception as e:
-        logger.critical(f"Export failed: {e}")
-        ctx.fail(f"Export failed: {e}")
+    pass
 
 
 @export.command(
@@ -355,31 +328,4 @@ def segmentation(
         --output-dir ./output --output-format mrc --level 0 \\
         --run-names "TS_001,TS_002"
     """
-    from copick.ops.export import export as export_op
-
-    logger = get_logger(__name__, debug=debug)
-
-    # Parse run names
-    run_names_list = None
-    if run_names:
-        run_names_list = [name.strip() for name in run_names.split(",") if name.strip()]
-
-    # Handle compression
-    compression_value = compression if compression and compression.lower() != "none" else None
-
-    try:
-        export_op(
-            config=config,
-            output_dir=output_dir,
-            run_names=run_names_list,
-            segmentation_uri=segmentation_uri,
-            output_format=output_format,
-            level=level,
-            compression=compression_value,
-            n_workers=max_workers,
-            log=debug,
-        )
-        logger.info("Export completed successfully.")
-    except Exception as e:
-        logger.critical(f"Export failed: {e}")
-        ctx.fail(f"Export failed: {e}")
+    pass

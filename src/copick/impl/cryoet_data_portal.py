@@ -148,61 +148,16 @@ class PortalAnnotationMeta(BaseModel):
     voxel_spacing: Optional[float] = None
     portal_author_names: Optional[List[str]] = []
 
-    @field_validator("portal_annotation", mode="before")
-    @classmethod
-    def check_portal_annotation(cls, v: Union[_PortalAnnotation, cdp.Annotation]) -> _PortalAnnotation:
-        if isinstance(v, cdp.Annotation):
-            return _PortalAnnotation(**v.to_dict())
-        return v
 
-    @field_validator("portal_annotation_shape", mode="before")
-    @classmethod
-    def check_portal_annotation_shape(
-        cls,
-        v: Union[_PortalAnnotationShape, cdp.AnnotationShape],
-    ) -> _PortalAnnotationShape:
-        if isinstance(v, cdp.AnnotationShape):
-            return _PortalAnnotationShape(**v.to_dict())
-        return v
 
-    @field_validator("portal_annotation_file", mode="before")
-    @classmethod
-    def check_portal_annotation_file(cls, v: Union[_PortalAnnotationFile, cdp.AnnotationFile]) -> _PortalAnnotationFile:
-        if isinstance(v, cdp.AnnotationFile):
-            return _PortalAnnotationFile(**v.to_dict())
-        return v
 
-    @property
-    def annotation_id(self) -> int:
-        return self.portal_annotation.id
 
-    @property
-    def annotation_shape_id(self) -> int:
-        return self.portal_annotation_shape.id
 
-    @property
-    def annotation_file_id(self) -> int:
-        return self.portal_annotation_file.id
 
-    @property
-    def shape_type(self) -> str:
-        return self.portal_annotation_shape.shape_type
 
-    @property
-    def object_name(self) -> str:
-        return self.portal_annotation.object_name
 
-    @property
-    def object_id(self) -> int:
-        return self.portal_annotation.object_id
 
-    @property
-    def s3_path(self) -> str:
-        return self.portal_annotation_file.s3_path
 
-    @property
-    def portal_authors(self) -> List[str]:
-        return self.portal_author_names
 
     def compare(self, meta: Dict[str, Any], authors: List[str]) -> bool:
         # To convert to proper format
@@ -228,10 +183,7 @@ class PortalTomogramMeta(BaseModel):
     @classmethod
     def from_portal_cached(cls, source: cdp.Tomogram, author_names: List[str]):
         """Create metadata from cached portal objects (avoids lazy loading for authors)."""
-        return cls(
-            portal_metadata=_PortalTomogram(**source.to_dict()),
-            portal_authors=author_names,
-        )
+        pass
 
     def compare(self, meta: Dict[str, Any], authors: List[str]) -> bool:
         # To convert to proper format
@@ -320,48 +272,18 @@ class CopickPicksFileCDP(CopickPicksFile):
 
         return points
 
-    @property
-    def portal_annotation_id(self) -> int:
-        return self.portal_metadata.annotation_id
 
-    @property
-    def portal_annotation_file_id(self) -> int:
-        return self.portal_metadata.annotation_file_id
 
-    @property
-    def portal_annotation_file_path(self) -> str:
-        return self.portal_metadata.s3_path
 
 
 class CopickPicksCDP(CopickPicksOverlay):
     run: "CopickRunCDP"
     meta: CopickPicksFileCDP
 
-    @property
-    def from_tool(self) -> bool:
-        return bool(self.read_only or self.session_id == "0")
 
-    @property
-    def from_user(self) -> bool:
-        return not self.from_tool
 
-    @property
-    def path(self) -> str:
-        if self.read_only:
-            return self.meta.portal_annotation_file_path
-        else:
-            return f"{self.run.overlay_path}/Picks/{self.user_id}_{self.session_id}_{self.pickable_object_name}.json"
 
-    @property
-    def directory(self) -> Union[str, None]:
-        if self.read_only:
-            return None
-        else:
-            return f"{self.run.overlay_path}/Picks/"
 
-    @property
-    def fs(self) -> AbstractFileSystem:
-        return s3fs.S3FileSystem(anon=True) if self.read_only else self.run.fs_overlay
 
     def _load(self) -> CopickPicksFile:
         # For read-only portal picks, load points from S3
@@ -404,31 +326,10 @@ class CopickPicksCDP(CopickPicksOverlay):
 class CopickMeshCDP(CopickMeshOverlay):
     run: "CopickRunCDP"
 
-    @property
-    def from_tool(self) -> bool:
-        return bool(self.read_only or self.session_id == "0")
 
-    @property
-    def from_user(self) -> bool:
-        return not self.from_tool
 
-    @property
-    def path(self) -> Union[str, None]:
-        if self.read_only:
-            return None
-        else:
-            return f"{self.run.overlay_path}/Meshes/{self.user_id}_{self.session_id}_{self.pickable_object_name}.glb"
 
-    @property
-    def directory(self) -> Union[str, None]:
-        if self.read_only:
-            return None
-        else:
-            return f"{self.run.overlay_path}/Meshes/"
 
-    @property
-    def fs(self) -> Union[AbstractFileSystem, None]:
-        return None if self.read_only else self.run.fs_overlay
 
     def _load(self) -> Union["Geometry", None]:
         if not self.fs.exists(self.path):
@@ -460,52 +361,19 @@ class CopickMeshCDP(CopickMeshOverlay):
 class CopickSegmentationMetaCDP(CopickSegmentationMeta):
     portal_metadata: Optional[PortalAnnotationMeta] = PortalAnnotationMeta()
 
-    @property
-    def portal_annotation_id(self) -> int:
-        return self.portal_metadata.annotation_id
 
-    @property
-    def portal_annotation_file_id(self) -> int:
-        return self.portal_metadata.annotation_file_id
 
-    @property
-    def portal_annotation_file_path(self) -> str:
-        return self.portal_metadata.s3_path
 
 
 class CopickSegmentationCDP(CopickSegmentationOverlay):
     run: "CopickRunCDP"
     meta: CopickSegmentationMetaCDP
 
-    @property
-    def from_tool(self) -> bool:
-        return bool(self.read_only or self.session_id == "0")
 
-    @property
-    def from_user(self) -> bool:
-        return not self.from_tool
 
-    @property
-    def filename(self) -> str:
-        if self.is_multilabel:
-            return f"{self.voxel_size:.3f}_{self.user_id}_{self.session_id}_{self.name}-multilabel.zarr"
-        else:
-            return f"{self.voxel_size:.3f}_{self.user_id}_{self.session_id}_{self.name}.zarr"
 
-    @property
-    def path(self) -> str:
-        if self.read_only:
-            return self.meta.portal_annotation_file_path
-        else:
-            return f"{self.run.overlay_path}/Segmentations/{self.filename}"
 
-    @property
-    def fs(self) -> AbstractFileSystem:
-        return s3fs.S3FileSystem(anon=True) if self.read_only else self.run.fs_overlay
 
-    @property
-    def portal_segmentation_id(self) -> int:
-        return self.meta.portal_annotation_file_id
 
     def zarr(self) -> zarr.storage.FSStore:
         if self.read_only:
@@ -534,17 +402,7 @@ class CopickSegmentationCDP(CopickSegmentationOverlay):
 class CopickFeaturesCDP(CopickFeaturesOverlay):
     tomogram: "CopickTomogramCDP"
 
-    @property
-    def path(self) -> str:
-        if self.read_only:
-            logger.critical("Data portal does not support features (yet).")
-            raise NotImplementedError("Data portal does not support features (yet).")
-        else:
-            return f"{self.tomogram.overlay_stem}_{self.feature_type}_features.zarr"
 
-    @property
-    def fs(self) -> AbstractFileSystem:
-        return self.tomogram.fs_overlay
 
     def zarr(self) -> zarr.storage.FSStore:
         if self.read_only:
@@ -575,32 +433,6 @@ class CopickTomogramMetaCDP(CopickTomogramMeta):
     portal_tomo_path: Optional[str] = None
     portal_metadata: Optional[PortalTomogramMeta] = PortalTomogramMeta()
 
-    @classmethod
-    def from_portal(cls, source: cdp.Tomogram, author_names: Optional[List[str]] = None):
-        reconstruction_method = camel(source.reconstruction_method)
-        processing_method = camel(source.processing)
-        processing_tool = camel(source.processing_software) if source.processing_software else ""
-        ctf_status = "ctfdeconv" if source.ctf_corrected else ""
-
-        # Only include non-empty processing_tool and ctf_status
-        name = f"{reconstruction_method}-{processing_method}"
-        if processing_tool:
-            name += f"-{processing_tool}"
-        if ctf_status:
-            name += f"-{ctf_status}"
-
-        # Use cached authors if provided, otherwise trigger lazy load
-        if author_names is not None:
-            portal_meta = PortalTomogramMeta.from_portal_cached(source, author_names)
-        else:
-            portal_meta = PortalTomogramMeta.from_tomogram(source)
-
-        return cls(
-            tomo_type=name,
-            portal_tomo_id=source.id,
-            portal_tomo_path=source.s3_omezarr_dir,
-            portal_metadata=portal_meta,
-        )
 
 
 class CopickTomogramCDP(CopickTomogramOverlay):
@@ -618,59 +450,19 @@ class CopickTomogramCDP(CopickTomogramOverlay):
         `cryoet_data_portal.Tomogram.processing_software` and `cryoet_data_portal.Tomogram.ctf_corrected` are discarded
         if null in the database.
         """
-        return self.meta.tomo_type
+        pass
 
     @property
     def portal_tomo(self) -> bool:
         """Whether this tomogram is from the portal or not."""
-        return self.meta.portal_tomo_id is not None
+        pass
 
-    @property
-    def static_path(self) -> str:
-        return self.meta.portal_tomo_path if self.portal_tomo else None
 
-    @property
-    def overlay_path(self) -> str:
-        return f"{self.voxel_spacing.overlay_path}/{self.tomo_type}.zarr"
 
-    @property
-    def overlay_stem(self) -> str:
-        return f"{self.voxel_spacing.overlay_path}/{self.tomo_type}"
 
-    @property
-    def fs_overlay(self) -> AbstractFileSystem:
-        return self.voxel_spacing.fs_overlay
 
-    @property
-    def fs_static(self) -> AbstractFileSystem:
-        return s3fs.S3FileSystem(anon=True)
 
-    def _query_static_features(self) -> List[CopickFeaturesCDP]:
-        # Features are not defined by the portal yet
-        return []
 
-    def _query_overlay_features(self) -> List[CopickFeaturesCDP]:
-        feat_loc = self.overlay_path.replace(".zarr", "_")
-        paths = self.fs_overlay.glob(feat_loc + "*_features.zarr") + self.fs_overlay.glob(feat_loc + "*_features.zarr/")
-        paths = [p.rstrip("/") for p in paths if self.fs_overlay.isdir(p)]
-        feature_types = [n.replace(feat_loc, "").replace("_features.zarr", "") for n in paths]
-        # Remove any hidden files?
-        feature_types = [ft for ft in feature_types if not ft.startswith(".")]
-
-        feature_types = list(set(feature_types))
-        clz, meta_clz = self._feature_factory()
-
-        return [
-            clz(
-                tomogram=self,
-                meta=meta_clz(
-                    tomo_type=self.tomo_type,
-                    feature_type=ft,
-                ),
-                read_only=False,
-            )
-            for ft in feature_types
-        ]
 
     def zarr(self) -> zarr.storage.FSStore:
         if self.read_only:
@@ -703,9 +495,6 @@ class CopickTomogramCDP(CopickTomogramOverlay):
 class CopickVoxelSpacingMetaCDP(CopickVoxelSpacingMeta):
     portal_vs_id: Optional[int] = None
 
-    @classmethod
-    def from_portal(cls, source: cdp.TomogramVoxelSpacing):
-        return cls(voxel_size=source.voxel_spacing, portal_vs_id=source.id)  # , portal_vs=source)
 
 
 class CopickVoxelSpacingCDP(CopickVoxelSpacingOverlay):
@@ -715,59 +504,10 @@ class CopickVoxelSpacingCDP(CopickVoxelSpacingOverlay):
     def _tomogram_factory(self) -> Tuple[Type[CopickTomogramCDP], Type[CopickTomogramMetaCDP]]:
         return CopickTomogramCDP, CopickTomogramMetaCDP
 
-    @property
-    def overlay_path(self):
-        return f"{self.run.overlay_path}/VoxelSpacing{self.voxel_size:.3f}"
 
-    @property
-    def fs_overlay(self):
-        return self.run.fs_overlay
 
-    @property
-    def portal_vs_id(self) -> int:
-        return self.meta.portal_vs_id
 
-    def _query_static_tomograms(self) -> List[CopickTomogramCDP]:
-        if self.portal_vs_id is None:
-            return []
 
-        cache = self.run.root._ensure_annotation_cache()
-        portal_tomos = cache.tomograms_by_vs.get(self.portal_vs_id, [])
-
-        if not portal_tomos:
-            return []
-
-        clz, meta_clz = self._tomogram_factory()
-        tomos = []
-
-        for t in portal_tomos:
-            author_names = cache.tomogram_authors.get(t.id, [])
-            tomo_meta = meta_clz.from_portal(t, author_names=author_names)
-            tomo = clz(voxel_spacing=self, meta=tomo_meta, read_only=True)
-            tomos.append(tomo)
-
-        return tomos
-
-    def _query_overlay_tomograms(self) -> List[CopickTomogramCDP]:
-        tomo_loc = f"{self.overlay_path}/"
-        paths = self.fs_overlay.glob(tomo_loc + "*.zarr") + self.fs_overlay.glob(tomo_loc + "*.zarr/")
-        paths = [p.rstrip("/") for p in paths if self.fs_overlay.isdir(p)]
-        tomo_types = [n.replace(tomo_loc, "").replace(".zarr", "") for n in paths]
-        tomo_types = [t for t in tomo_types if "features" not in t]
-        # Remove any hidden files?
-        tomo_types = [tt for tt in tomo_types if not tt.startswith(".")]
-
-        tomo_types = list(set(tomo_types))
-        clz, meta_clz = self._tomogram_factory()
-
-        return [
-            clz(
-                voxel_spacing=self,
-                meta=meta_clz(tomo_type=tt),
-                read_only=False,
-            )
-            for tt in tomo_types
-        ]
 
     def ensure(self, create: bool = False) -> bool:
         """Checks if the voxel spacing record exists in the static or overlay directory, optionally creating it in the
@@ -845,14 +585,6 @@ class CopickRunMetaCDP(CopickRunMeta):
     portal_run_name: Optional[str] = None
     portal_dataset_id: Optional[int] = None
 
-    @classmethod
-    def from_portal(cls, source: cdp.Run):
-        return cls(
-            name=f"{source.id}",
-            portal_run_id=source.id,
-            portal_run_name=source.name,
-            portal_dataset_id=source.dataset_id,
-        )
 
 
 class CopickRunCDP(CopickRunOverlay):
@@ -871,58 +603,12 @@ class CopickRunCDP(CopickRunOverlay):
     def _segmentation_factory(self) -> Tuple[Type[CopickSegmentationCDP], Type[CopickSegmentationMetaCDP]]:
         return CopickSegmentationCDP, CopickSegmentationMetaCDP
 
-    @property
-    def overlay_path(self) -> str:
-        return f"{self.root.root_overlay}/ExperimentRuns/{self.name}"
 
-    @property
-    def fs_overlay(self) -> AbstractFileSystem:
-        return self.root.fs_overlay
 
-    @property
-    def portal_run_id(self) -> int:
-        return self.meta.portal_run_id
 
-    @property
-    def portal_run_name(self) -> str:
-        return self.meta.portal_run_name
 
-    @property
-    def portal_dataset_id(self) -> int:
-        return self.meta.portal_dataset_id
 
-    def _query_static_voxel_spacings(self) -> List[CopickVoxelSpacingCDP]:
-        # VoxelSpacings only added on overlay
-        if self.portal_run_id is None:
-            return []
 
-        client = cdp.Client()
-        portal_vs = _retry_portal_call(
-            cdp.TomogramVoxelSpacing.find,
-            client,
-            [cdp.TomogramVoxelSpacing.run_id == self.portal_run_id],  # noqa
-        )
-
-        # portal_vs = self.portal_run.tomogram_voxel_spacings
-        clz, meta_clz = self._voxel_spacing_factory()
-
-        return [clz(meta=meta_clz.from_portal(vs), run=self) for vs in portal_vs]
-
-    def _query_overlay_voxel_spacings(self) -> List[CopickVoxelSpacingCDP]:
-        overlay_vs_loc = f"{self.overlay_path}/VoxelSpacing"
-        opaths = set(self.fs_overlay.glob(overlay_vs_loc + "*") + self.fs_overlay.glob(overlay_vs_loc + "*/"))
-        opaths = [p.rstrip("/") for p in opaths]
-        spacings = [float(p.replace(f"{overlay_vs_loc}", "")) for p in opaths]
-
-        clz, meta_clz = self._voxel_spacing_factory()
-
-        return [
-            clz(
-                meta=meta_clz(voxel_size=s),
-                run=self,
-            )
-            for s in spacings
-        ]
 
     def _query_static_picks(self) -> List[CopickPicksCDP]:
         # Run only added on overlay
@@ -1030,129 +716,9 @@ class CopickRunCDP(CopickRunOverlay):
 
         return picks
 
-    def _query_static_meshes(self) -> List[CopickMeshCDP]:
-        # Not defined by the portal yet
-        return []
 
-    def _query_overlay_meshes(self) -> List[CopickMeshCDP]:
-        mesh_loc = f"{self.overlay_path}/Meshes/"
-        paths = self.fs_overlay.glob(mesh_loc + "*.glb")
-        names = [n.replace(mesh_loc, "").replace(".glb", "") for n in paths]
-        # Remove any hidden files?
-        names = [n for n in names if not n.startswith(".")]
 
-        users = [n.split("_")[0] for n in names]
-        sessions = [n.split("_")[1] for n in names]
-        objects = [n.split("_")[2] for n in names]
 
-        clz, meta_clz = self._mesh_factory()
-
-        return [
-            clz(
-                run=self,
-                meta=meta_clz(
-                    pickable_object_name=o,
-                    user_id=u,
-                    session_id=s,
-                ),
-                read_only=False,
-            )
-            for u, s, o in zip(users, sessions, objects, strict=True)
-        ]
-
-    def _query_static_segmentations(self) -> List[CopickSegmentationCDP]:
-        # Run only added on overlay
-        if self.portal_run_id is None:
-            return []
-
-        # Get cached data from root (fetches once for all runs)
-        cache = self.root._ensure_annotation_cache()
-        go_map = self.root.go_map
-
-        # Filter annotation files for this run from cache
-        seg_anno_files = cache.seg_files_by_run.get(self.portal_run_id, [])
-        if not seg_anno_files:
-            return []
-
-        segmentations = []
-        clz, meta_clz = self._segmentation_factory()
-
-        for af in seg_anno_files:
-            shape = cache.annotation_shapes[af.annotation_shape_id]
-            annotation = cache.annotations[shape.annotation_id]
-            vs = cache.voxel_spacings.get(af.tomogram_voxel_spacing_id)
-            author_names = cache.author_names.get(annotation.id, [])
-
-            object_name = go_map.get(annotation.object_id, f"{camel(annotation.object_name)}-{af.id}")
-
-            # Build metadata directly using cached objects (avoid lazy loading in from_portal)
-            portal_meta = PortalAnnotationMeta(
-                portal_annotation_file=af,
-                portal_annotation_shape=shape,
-                portal_annotation=annotation,
-                voxel_spacing=vs.voxel_spacing if vs else None,
-                portal_author_names=author_names,
-            )
-
-            seg_meta = meta_clz(
-                is_multilabel=False,
-                voxel_size=vs.voxel_spacing if vs else 0.0,
-                user_id="data-portal",
-                session_id=str(af.id),
-                name=object_name,
-                portal_metadata=portal_meta,
-            )
-            seg = clz(run=self, meta=seg_meta, read_only=True)
-            segmentations.append(seg)
-
-        return segmentations
-
-    def _query_overlay_segmentations(self) -> List[CopickSegmentationCDP]:
-        seg_loc = f"{self.overlay_path}/Segmentations/"
-        paths = self.fs_overlay.glob(seg_loc + "*.zarr") + self.fs_overlay.glob(seg_loc + "*.zarr/")
-        paths = [p.rstrip("/") for p in paths if self.fs_overlay.isdir(p)]
-        names = [n.replace(seg_loc, "").replace(".zarr", "") for n in paths]
-        # Remove any hidden files?
-        names = [n for n in names if not n.startswith(".")]
-
-        # Deduplicate
-        names = list(set(names))
-
-        # multilabel vs single label
-        metas = []
-        clz, meta_clz = self._segmentation_factory()
-        for n in names:
-            if "multilabel" in n:
-                parts = n.split("_")
-                metas.append(
-                    meta_clz(
-                        is_multilabel=True,
-                        voxel_size=float(parts[0]),
-                        user_id=parts[1],
-                        session_id=parts[2],
-                        name=parts[3].replace("-multilabel", ""),
-                    ),
-                )
-            else:
-                parts = n.split("_")
-                metas.append(
-                    meta_clz(
-                        is_multilabel=False,
-                        voxel_size=float(parts[0]),
-                        user_id=parts[1],
-                        session_id=parts[2],
-                        name=parts[3],
-                    ),
-                )
-
-        return [
-            clz(
-                run=self,
-                meta=m,
-                read_only=False,
-            )
-            for m in metas
-        ]
 
     def get_segmentations(
         self,
@@ -1249,13 +815,7 @@ class CopickRunCDP(CopickRunOverlay):
 class CopickObjectCDP(CopickObjectOverlay):
     root: "CopickRootCDP"
 
-    @property
-    def path(self) -> str:
-        return f"{self.root.root_overlay}/Objects/{self.name}.zarr"
 
-    @property
-    def fs(self) -> AbstractFileSystem:
-        return self.root.fs_overlay
 
     def zarr(self) -> Union[None, zarr.storage.FSStore]:
         if not self.is_particle:
@@ -1313,11 +873,8 @@ class CopickRootCDP(CopickRoot):
 
     def reconnect(self) -> None:
         """Force reconnection of the overlay filesystem and invalidate caches."""
-        self.fs_overlay._reconnect()
+        pass
 
-    @property
-    def go_map(self) -> Dict[str, str]:
-        return {po.identifier: po.name for po in self.pickable_objects if po.identifier is not None}
 
     def _ensure_annotation_cache(self) -> PortalCache:
         """Lazily fetch and cache all portal annotation data for picks, segmentations, and tomograms."""
@@ -1443,21 +1000,7 @@ class CopickRootCDP(CopickRoot):
         self._portal_cache = cache
         return cache
 
-    @property
-    def datasets(self) -> List[cdp.Dataset]:
-        warnings.warn(
-            "CopickRootCDP.datasets will be deprecated in the next major release. Use "
-            "CopickRootCDP.dataset_ids instead.",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        client = cdp.Client()
-        datasets = _retry_portal_call(cdp.Dataset.find, client, [cdp.Dataset.id._in(self.dataset_ids)])
-        return datasets
 
-    @property
-    def dataset_ids(self) -> List[int]:
-        return self.config.dataset_ids
 
     @classmethod
     def from_file(cls, path: str) -> "CopickRootCDP":
@@ -1472,26 +1015,7 @@ class CopickRootCDP(CopickRoot):
     def _object_factory(self) -> Tuple[Type[CopickObjectCDP], Type[PickableObject]]:
         return CopickObjectCDP, PickableObject
 
-    def query(self) -> List[CopickRunCDP]:
-        client = cdp.Client()
-        portal_runs = _retry_portal_call(cdp.Run.find, client, [cdp.Run.dataset_id._in(self.dataset_ids)])  # noqa
-
-        runs = []
-        for pr in portal_runs:
-            rm = CopickRunMetaCDP.from_portal(pr)
-            runs.append(CopickRunCDP(root=self, meta=rm))
-
-        return runs
 
     def _query_objects(self):
         """Override to create objects from config. For CryoET Data Portal, objects are always writable since they only exist in overlay."""
-        clz, meta_clz = self._object_factory()
-        objects = []
-
-        for obj_meta in self.config.pickable_objects:
-            # For CryoET Data Portal, objects are always writable (read_only=False)
-            # since they only exist in the overlay filesystem
-            obj = clz(self, obj_meta, read_only=False)
-            objects.append(obj)
-
-        self._objects = objects
+        pass

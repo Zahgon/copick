@@ -14,21 +14,6 @@ from copick.ops.open import from_file
 from copick.ops.run import map_runs
 
 
-def _segmentation_query(
-    run: CopickRun,
-    user_id: Union[str, Iterable[str], None] = None,
-    session_id: Union[str, Iterable[str], None] = None,
-    is_multilabel: bool = None,
-    name: Union[str, Iterable[str], None] = None,
-    voxel_size: Union[float, Iterable[float], None] = None,
-) -> List[CopickSegmentation]:
-    return run.get_segmentations(
-        user_id=user_id,
-        session_id=session_id,
-        is_multilabel=is_multilabel,
-        name=name,
-        voxel_size=voxel_size,
-    )
 
 
 def get_segmentations(
@@ -253,29 +238,7 @@ def get_voxelspacings(
     Returns:
         A list of voxel spacings.
     """
-
-    if isinstance(root, str):
-        root = from_file(root)
-
-    if runs is None:
-        runs = root.runs
-    elif isinstance(runs, str):
-        runs = [root.get_run(name=runs)]
-    elif isinstance(runs, CopickRun):
-        runs = [runs]
-
-    if parallel:
-        res = map_runs(
-            _voxelspacing_query,
-            root,
-            runs,
-            workers=workers,
-            voxel_size=voxel_size,
-            show_progress=show_progress,
-        )
-        return [vs for vslist in res.values() for vs in vslist]
-    else:
-        return [vs for run in runs for vs in _voxelspacing_query(run, voxel_size)]
+    pass
 
 
 def _tomo_query(
@@ -429,13 +392,4 @@ def get_runs(
     Returns:
         A list of runs.
     """
-
-    if isinstance(root, str):
-        root = from_file(root)
-
-    if names is None:
-        return root.runs
-    elif isinstance(names, str):
-        return [root.get_run(name=names)]
-    else:
-        return [root.get_run(name=name) for name in names]
+    pass

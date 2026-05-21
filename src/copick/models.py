@@ -42,41 +42,26 @@ class PickableObject(BaseModel):
     radius: Optional[float] = None
     metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)
 
-    @property
-    def go_id(self):
-        return self.identifier
 
-    @go_id.setter
-    def go_id(self, value: str) -> None:
-        self.identifier = value
 
     @field_validator("label")
     @classmethod
     def validate_label(cls, v) -> int:
         """Validate the label."""
-        assert v != 0, "Label 0 is reserved for background."
-        return v
+        pass
 
     @field_validator("color")
     @classmethod
     def validate_color(cls, v) -> Tuple[int, int, int, int]:
         """Validate the color."""
-        assert len(v) == 4, "Color must be a 4-tuple (RGBA)."
-        assert all(0 <= c <= 255 for c in v), "Color values must be in the range [0, 255]."
-        return v
+        pass
 
     @field_validator("name")
     @classmethod
     def validate_name(cls, v) -> Optional[str]:
         """Validate the name."""
-        if v != sanitize_name(v):
-            raise ValueError(f"Name '{v}' contains invalid characters. Use copick.escape.sanitize_name() to clean it.")
-        return v
+        pass
 
-    @field_validator("metadata", mode="before")
-    @classmethod
-    def none_to_empty_dict(cls, v):
-        return {} if v is None else v
 
 
 class CopickConfig(BaseModel):
@@ -123,21 +108,13 @@ class CopickConfig(BaseModel):
     @classmethod
     def validate_user_id(cls, v) -> Optional[str]:
         """Validate the user_id."""
-        if v is not None and v != sanitize_name(v):
-            raise ValueError(
-                f"user_id '{v}' contains invalid characters. Use copick.escape.sanitize_name() to clean it.",
-            )
-        return v
+        pass
 
     @field_validator("session_id")
     @classmethod
     def validate_session_id(cls, v) -> Optional[str]:
         """Validate the session_id."""
-        if v is not None and v != sanitize_name(v):
-            raise ValueError(
-                f"session_id '{v}' contains invalid characters. Use copick.escape.sanitize_name() to clean it.",
-            )
-        return v
+        pass
 
 
 class CopickLocation(BaseModel):
@@ -182,11 +159,7 @@ class CopickPoint(BaseModel):
     @classmethod
     def validate_transformation(cls, v) -> List[List[float]]:
         """Validate the transformation matrix."""
-        arr = np.array(v)
-        assert arr.shape == (4, 4), "transformation must be a 4x4 matrix."
-        assert arr[3, 3] == 1.0, "Last element of transformation matrix must be 1.0."
-        assert np.allclose(arr[3, :], [0.0, 0.0, 0.0, 1.0]), "Last row of transformation matrix must be [0, 0, 0, 1]."
-        return v
+        pass
 
     @property
     def transformation(self) -> np.ndarray:
@@ -195,15 +168,12 @@ class CopickPoint(BaseModel):
         Returns:
             np.ndarray: 4x4 transformation matrix.
         """
-        return np.array(self.transformation_)
+        pass
 
     @transformation.setter
     def transformation(self, value: np.ndarray) -> None:
         """Set the transformation matrix."""
-        assert value.shape == (4, 4), "Transformation must be a 4x4 matrix."
-        assert value[3, 3] == 1.0, "Last element of transformation matrix must be 1.0."
-        assert np.allclose(value[3, :], [0.0, 0.0, 0.0, 1.0]), "Last row of transformation matrix must be [0, 0, 0, 1]."
-        self.transformation_ = value.tolist()
+        pass
 
 
 class CopickObject:
@@ -249,41 +219,14 @@ class CopickObject:
         )
         return ret
 
-    @property
-    def name(self) -> str:
-        return self.meta.name
 
-    @property
-    def is_particle(self) -> bool:
-        return self.meta.is_particle
 
-    @property
-    def label(self) -> Union[int, None]:
-        return self.meta.label
 
-    @property
-    def color(self) -> Union[Tuple[int, int, int, int], None]:
-        return self.meta.color
 
-    @property
-    def emdb_id(self) -> Union[str, None]:
-        return self.meta.emdb_id
 
-    @property
-    def pdb_id(self) -> Union[str, None]:
-        return self.meta.pdb_id
 
-    @property
-    def identifier(self) -> Union[str, None]:
-        return self.meta.identifier
 
-    @property
-    def map_threshold(self) -> Union[float, None]:
-        return self.meta.map_threshold
 
-    @property
-    def radius(self) -> Union[float, None]:
-        return self.meta.radius
 
     @property
     def metadata(self) -> Dict[str, Any]:
@@ -364,8 +307,7 @@ class CopickObject:
             y: Slice for the y-axis.
             z: Slice for the z-axis.
         """
-        loc = self.zarr()
-        zarr.open(loc)[zarr_group][z, y, x] = data
+        pass
 
     def delete(self) -> None:
         """Delete the object."""
@@ -410,32 +352,14 @@ class CopickRoot:
         lr = None if self._runs is None else len(self._runs)
         return f"CopickRoot(user_id={self.user_id}, len(pickable_objects)={lpo}, len(runs)={lr}) at {hex(id(self))}"
 
-    @property
-    def user_id(self) -> str:
-        return self.config.user_id
 
-    @user_id.setter
-    def user_id(self, value: str) -> None:
-        self.config.user_id = value
 
-    @property
-    def session_id(self) -> str:
-        return self.config.session_id
 
-    @session_id.setter
-    def session_id(self, value: str) -> None:
-        self.config.session_id = value
 
     def query(self) -> List["CopickRun"]:
         """Override this method to query for runs."""
         pass
 
-    @property
-    def runs(self) -> List["CopickRun"]:
-        if self._runs is None:
-            self._runs = self.query()
-
-        return self._runs
 
     def get_run(self, name: str, **kwargs) -> Union["CopickRun", None]:
         """Get run by name.
@@ -466,16 +390,7 @@ class CopickRoot:
 
         return None
 
-    def _query_objects(self):
-        clz, meta_clz = self._object_factory()
-        self._objects = [clz(self, meta=obj) for obj in self.config.pickable_objects]
 
-    @property
-    def pickable_objects(self) -> List["CopickObject"]:
-        if self._objects is None:
-            self._query_objects()
-
-        return self._objects
 
     def get_object(self, name: str) -> Union["CopickObject", None]:
         """Get object by name.
@@ -494,8 +409,7 @@ class CopickRoot:
 
     def refresh(self) -> None:
         """Refresh the list of runs."""
-        self._runs = self.query()
-        self._objects = None  # Reset objects to force reloading
+        pass
 
     def reconnect(self) -> None:
         """Reconnect to the storage backend and invalidate all caches.
@@ -562,14 +476,7 @@ class CopickRoot:
         Args:
             name: Name of the run to delete.
         """
-        run = self.get_run(name)
-
-        if run is None:
-            return
-
-        self._runs.remove(run)
-        run.delete()
-        del run
+        pass
 
     def _run_factory(self) -> Tuple[Type["CopickRun"], Type["CopickRunMeta"]]:
         """Override this method to return the run class and run metadata class."""
@@ -795,13 +702,7 @@ class CopickRun:
         )
         return ret
 
-    @property
-    def name(self):
-        return self.meta.name
 
-    @name.setter
-    def name(self, value: str) -> None:
-        self.meta.name = value
 
     def query_voxelspacings(self) -> List["CopickVoxelSpacing"]:
         """Override this method to query for voxel_spacings.
@@ -835,12 +736,6 @@ class CopickRun:
         """
         raise NotImplementedError("query_segmentations must be implemented for CopickRun.")
 
-    @property
-    def voxel_spacings(self) -> List["CopickVoxelSpacing"]:
-        if self._voxel_spacings is None:
-            self._voxel_spacings = self.query_voxelspacings()
-
-        return self._voxel_spacings
 
     def get_voxel_spacing(self, voxel_size: float, **kwargs) -> Union["CopickVoxelSpacing", None]:
         """Get voxel spacing object by voxel size value.
@@ -884,10 +779,7 @@ class CopickRun:
         Returns:
             List[CopickPicks]: List of user-generated picks.
         """
-        if self.root.config.user_id is None:
-            return [p for p in self.picks if p.from_user]
-        else:
-            return self.get_picks(user_id=self.root.config.user_id)
+        pass
 
     def tool_picks(self) -> List["CopickPicks"]:
         """Get all tool generated picks (i.e. picks that have `CopickPicks.session_id == 0`).
@@ -895,7 +787,7 @@ class CopickRun:
         Returns:
             List[CopickPicks]: List of tool-generated picks.
         """
-        return [p for p in self.picks if p.from_tool]
+        pass
 
     def get_picks(
         self,
@@ -931,12 +823,6 @@ class CopickRun:
 
         return ret
 
-    @property
-    def meshes(self) -> List["CopickMesh"]:
-        if self._meshes is None:
-            self._meshes = self.query_meshes()
-
-        return self._meshes
 
     def user_meshes(self) -> List["CopickMesh"]:
         """Get all user generated meshes (i.e. meshes that have `CopickMesh.session_id != 0`).
@@ -944,10 +830,7 @@ class CopickRun:
         Returns:
             List[CopickMesh]: List of user-generated meshes.
         """
-        if self.root.config.user_id is None:
-            return [m for m in self.meshes if m.from_user]
-        else:
-            return self.get_meshes(user_id=self.root.config.user_id)
+        pass
 
     def tool_meshes(self) -> List["CopickMesh"]:
         """Get all tool generated meshes (i.e. meshes that have `CopickMesh.session_id == 0`).
@@ -955,7 +838,7 @@ class CopickRun:
         Returns:
             List[CopickMesh]: List of tool-generated meshes.
         """
-        return [m for m in self.meshes if m.from_tool]
+        pass
 
     def get_meshes(
         self,
@@ -989,12 +872,6 @@ class CopickRun:
 
         return ret
 
-    @property
-    def segmentations(self) -> List["CopickSegmentation"]:
-        if self._segmentations is None:
-            self._segmentations = self.query_segmentations()
-
-        return self._segmentations
 
     def user_segmentations(self) -> List["CopickSegmentation"]:
         """Get all user generated segmentations (i.e. segmentations that have `CopickSegmentation.session_id != 0`).
@@ -1002,10 +879,7 @@ class CopickRun:
         Returns:
             List[CopickSegmentation]: List of user-generated segmentations.
         """
-        if self.root.config.user_id is None:
-            return [s for s in self.segmentations if s.from_user]
-        else:
-            return self.get_segmentations(user_id=self.root.config.user_id)
+        pass
 
     def tool_segmentations(self) -> List["CopickSegmentation"]:
         """Get all tool generated segmentations (i.e. segmentations that have `CopickSegmentation.session_id == 0`).
@@ -1013,7 +887,7 @@ class CopickRun:
         Returns:
             List[CopickSegmentation]: List of tool-generated segmentations.
         """
-        return [s for s in self.segmentations if s.from_tool]
+        pass
 
     def get_segmentations(
         self,
@@ -1332,26 +1206,23 @@ class CopickRun:
 
     def refresh_voxel_spacings(self) -> None:
         """Refresh the voxel spacings."""
-        self._voxel_spacings = self.query_voxelspacings()
+        pass
 
     def refresh_picks(self) -> None:
         """Refresh the picks."""
-        self._picks = self.query_picks()
+        pass
 
     def refresh_meshes(self) -> None:
         """Refresh the meshes."""
-        self._meshes = self.query_meshes()
+        pass
 
     def refresh_segmentations(self) -> None:
         """Refresh the segmentations."""
-        self._segmentations = self.query_segmentations()
+        pass
 
     def refresh(self) -> None:
         """Refresh all child types."""
-        self.refresh_voxel_spacings()
-        self.refresh_picks()
-        self.refresh_meshes()
-        self.refresh_segmentations()
+        pass
 
     def _invalidate_caches(self) -> None:
         """Invalidate all cached child data for this run."""
@@ -1504,20 +1375,11 @@ class CopickVoxelSpacing:
         lts = None if self._tomograms is None else len(self._tomograms)
         return f"CopickVoxelSpacing(voxel_size={self.voxel_size}, len(tomograms)={lts}) at {hex(id(self))}"
 
-    @property
-    def voxel_size(self) -> float:
-        return self.meta.voxel_size
 
     def query_tomograms(self) -> List["CopickTomogram"]:
         """Override this method to query for tomograms."""
         raise NotImplementedError("query_tomograms must be implemented for CopickVoxelSpacing.")
 
-    @property
-    def tomograms(self) -> List["CopickTomogram"]:
-        if self._tomograms is None:
-            self._tomograms = self.query_tomograms()
-
-        return self._tomograms
 
     def get_tomogram(self, tomo_type: str) -> Union["CopickTomogram", None]:
         """Get tomogram by type.
@@ -1555,11 +1417,11 @@ class CopickVoxelSpacing:
 
     def refresh_tomograms(self) -> None:
         """Refresh `CopickVoxelSpacing.tomograms` from storage."""
-        self._tomograms = self.query_tomograms()
+        pass
 
     def refresh(self) -> None:
         """Refresh `CopickVoxelSpacing.tomograms` from storage."""
-        self.refresh_tomograms()
+        pass
 
     def _invalidate_caches(self) -> None:
         """Invalidate all cached child data for this voxel spacing."""
@@ -1690,21 +1552,12 @@ class CopickTomogram:
         lft = None if self._features is None else len(self._features)
         return f"CopickTomogram(tomo_type={self.tomo_type}, len(features)={lft}) at {hex(id(self))}"
 
-    @property
-    def tomo_type(self) -> str:
-        return self.meta.tomo_type
 
-    @property
-    def features(self) -> List["CopickFeatures"]:
-        if self._features is None:
-            self._features = self.query_features()
-
-        return self._features
 
     @features.setter
     def features(self, value: List["CopickFeatures"]) -> None:
         """Set the features."""
-        self._features = value
+        pass
 
     def get_features(self, feature_type: str) -> Union["CopickFeatures", None]:
         """Get feature maps by type.
@@ -1768,11 +1621,11 @@ class CopickTomogram:
 
     def refresh_features(self) -> None:
         """Refresh `CopickTomogram.features` from storage."""
-        self._features = self.query_features()
+        pass
 
     def refresh(self) -> None:
         """Refresh `CopickTomogram.features` from storage."""
-        self.refresh_features()
+        pass
 
     def _invalidate_caches(self) -> None:
         """Invalidate all cached features for this tomogram."""
@@ -1867,8 +1720,7 @@ class CopickTomogram:
             y: Slice for the y-axis.
             z: Slice for the z-axis.
         """
-        loc = self.zarr()
-        zarr.open(loc)[zarr_group][z, y, x] = data
+        pass
 
 
 class CopickFeaturesMeta(BaseModel):
@@ -1906,13 +1758,7 @@ class CopickFeatures:
     def __repr__(self):
         return f"CopickFeatures(tomo_type={self.tomo_type}, feature_type={self.feature_type}) at {hex(id(self))}"
 
-    @property
-    def tomo_type(self) -> str:
-        return self.meta.tomo_type
 
-    @property
-    def feature_type(self) -> str:
-        return self.meta.feature_type
 
     def delete(self):
         """Delete the feature map record."""
@@ -1974,8 +1820,7 @@ class CopickFeatures:
             zarr_group: Zarr group to access.
             slices: Tuple of slices for the axes.
         """
-        loc = self.zarr()
-        zarr.open(loc)[zarr_group][slices] = data
+        pass
 
 
 class CopickPicksFile(BaseModel):
@@ -2061,51 +1906,18 @@ class CopickPicks:
         """Store the points (set using `CopickPicks.points` property)."""
         self._store()
 
-    @property
-    def from_tool(self) -> bool:
-        return self.session_id == "0"
 
-    @property
-    def from_user(self) -> bool:
-        return self.session_id != "0"
 
-    @property
-    def pickable_object_name(self) -> str:
-        return self.meta.pickable_object_name
 
-    @property
-    def user_id(self) -> str:
-        return self.meta.user_id
 
-    @property
-    def session_id(self) -> Union[str, Literal["0"]]:
-        return self.meta.session_id
 
-    @property
-    def points(self) -> List[CopickPoint]:
-        if self.meta.points is None or len(self.meta.points) == 0:
-            self.meta = self.load()
 
-        return self.meta.points
 
-    @points.setter
-    def points(self, value: List[CopickPoint]) -> None:
-        self.meta.points = value
 
-    @property
-    def trust_orientation(self) -> bool:
-        return self.meta.trust_orientation
-
-    @property
-    def color(self) -> Union[Tuple[int, int, int, int], None]:
-        if self.run.root.get_object(self.pickable_object_name) is None:
-            raise ValueError(f"{self.pickable_object_name} is not a recognized object name (run: {self.run.name}).")
-
-        return self.run.root.get_object(self.pickable_object_name).color
 
     def refresh(self) -> None:
         """Refresh the points from storage."""
-        self.meta = self.load()
+        pass
 
     def delete(self) -> None:
         """Delete the pick record."""
@@ -2174,17 +1986,11 @@ class CopickPicks:
 
     def df(self, format: str = "relion") -> "pd.DataFrame":
         """Returns the points as a pandas DataFrame with columns based on the format."""
-        if format == "relion":
-            return picks_to_df_relion(self)
-        else:
-            raise ValueError(f"Format {format} is not supported.")
+        pass
 
     def from_df(self, df: "pd.DataFrame", format: str = "relion") -> None:
         """Set the points from a pandas DataFrame with columns based on the format."""
-        if format == "relion":
-            relion_df_to_picks(self, df)
-        else:
-            raise ValueError(f"Format {format} is not supported.")
+        pass
 
 
 class CopickMeshMeta(BaseModel):
@@ -2234,21 +2040,9 @@ class CopickMesh:
         )
         return ret
 
-    @property
-    def pickable_object_name(self) -> str:
-        return self.meta.pickable_object_name
 
-    @property
-    def user_id(self) -> str:
-        return self.meta.user_id
 
-    @property
-    def session_id(self) -> Union[str, Literal["0"]]:
-        return self.meta.session_id
 
-    @property
-    def color(self):
-        return self.run.root.get_object(self.pickable_object_name).color
 
     def _load(self) -> "Geometry":
         """Override this method to load mesh from a RESTful interface or filesystem."""
@@ -2273,28 +2067,13 @@ class CopickMesh:
         """Store the mesh."""
         self._store()
 
-    @property
-    def mesh(self) -> "Geometry":
-        if self._mesh is None:
-            self._mesh = self.load()
 
-        return self._mesh
 
-    @mesh.setter
-    def mesh(self, value: "Geometry") -> None:
-        self._mesh = value
 
-    @property
-    def from_user(self) -> bool:
-        return self.session_id != "0"
-
-    @property
-    def from_tool(self) -> bool:
-        return self.session_id == "0"
 
     def refresh(self) -> None:
         """Refresh `CopickMesh.mesh` from storage."""
-        self._mesh = self.load()
+        pass
 
     def delete(self) -> None:
         """Delete the mesh record."""
@@ -2366,40 +2145,13 @@ class CopickSegmentation:
         )
         return ret
 
-    @property
-    def user_id(self) -> str:
-        return self.meta.user_id
 
-    @property
-    def session_id(self) -> Union[str, Literal["0"]]:
-        return self.meta.session_id
 
-    @property
-    def from_tool(self) -> bool:
-        return self.session_id == "0"
 
-    @property
-    def from_user(self) -> bool:
-        return self.session_id != "0"
 
-    @property
-    def is_multilabel(self) -> bool:
-        return self.meta.is_multilabel
 
-    @property
-    def voxel_size(self) -> float:
-        return self.meta.voxel_size
 
-    @property
-    def name(self) -> str:
-        return self.meta.name
 
-    @property
-    def color(self):
-        if self.is_multilabel:
-            return [128, 128, 128, 0]
-        else:
-            return self.run.root.get_object(self.name).color
 
     def delete(self) -> None:
         """Delete the segmentation record."""
@@ -2482,8 +2234,7 @@ class CopickSegmentation:
             y: Slice for the y-axis.
             z: Slice for the z-axis.
         """
-        loc = self.zarr()
-        zarr.open(loc)[zarr_group][z, y, x] = data
+        pass
 
 
 COPICK_TYPES = (

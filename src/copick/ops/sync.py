@@ -34,55 +34,7 @@ def _sync_picks_worker(
     Returns:
         A dictionary with the number of processed picks and any errors encountered during the sync.
     """
-    result = {"processed": 0, "errors": []}
-
-    try:
-        target_run = target_root.get_run(target_run_name)
-
-        for source_obj in source_objects:
-            target_obj = target_objects.get(source_obj, source_obj)
-
-            # Check if target object exists
-            if target_root.get_object(target_obj) is None:
-                result["errors"].append(f"Target object {target_obj} not found in target root")
-                continue
-
-            # Get all picks for this object in the source run
-            source_picks = run.get_picks(object_name=source_obj)
-
-            for pick in source_picks:
-                try:
-                    # Filter by source users if specified
-                    if source_users and pick.user_id not in source_users:
-                        continue
-
-                    # Map user ID
-                    target_user_id = target_users.get(pick.user_id, pick.user_id) if target_users else pick.user_id
-
-                    # Create or get target pick
-                    target_pick = target_run.new_picks(
-                        object_name=target_obj,
-                        user_id=target_user_id,
-                        session_id=pick.session_id,
-                        exist_ok=exist_ok,
-                    )
-
-                    # Copy points
-                    target_pick.points = pick.points
-                    target_pick.store()
-
-                    result["processed"] += 1
-
-                    if log:
-                        logger.info(f"Synced picks {source_obj} -> {target_obj} from {run.name} to {target_run_name}")
-
-                except Exception as e:
-                    result["errors"].append(f"Error syncing picks {source_obj} from {run.name}: {str(e)}")
-
-    except Exception as e:
-        result["errors"].append(f"Error processing run {run.name}: {str(e)}")
-
-    return result
+    pass
 
 
 def _sync_meshes_worker(
@@ -110,55 +62,7 @@ def _sync_meshes_worker(
     Returns:
         A dictionary with the number of processed meshes and any errors encountered.
     """
-    result = {"processed": 0, "errors": []}
-
-    try:
-        target_run = target_root.get_run(target_run_name)
-
-        for source_obj in source_objects:
-            target_obj = target_objects.get(source_obj, source_obj)
-
-            # Check if target object exists
-            if target_root.get_object(target_obj) is None:
-                result["errors"].append(f"Target object {target_obj} not found in target root")
-                continue
-
-            # Get all meshes for this object in the source run
-            source_meshes = run.get_meshes(object_name=source_obj)
-
-            for mesh in source_meshes:
-                try:
-                    # Filter by source users if specified
-                    if source_users and mesh.user_id not in source_users:
-                        continue
-
-                    # Map user ID
-                    target_user_id = target_users.get(mesh.user_id, mesh.user_id) if target_users else mesh.user_id
-
-                    # Create or get target mesh
-                    target_mesh = target_run.new_mesh(
-                        object_name=target_obj,
-                        user_id=target_user_id,
-                        session_id=mesh.session_id,
-                        exist_ok=exist_ok,
-                    )
-
-                    # Copy mesh data
-                    target_mesh.mesh = mesh.mesh
-                    target_mesh.store()
-
-                    result["processed"] += 1
-
-                    if log:
-                        logger.info(f"Synced mesh {source_obj} -> {target_obj} from {run.name} to {target_run_name}")
-
-                except Exception as e:
-                    result["errors"].append(f"Error syncing mesh {source_obj} from {run.name}: {str(e)}")
-
-    except Exception as e:
-        result["errors"].append(f"Error processing run {run.name}: {str(e)}")
-
-    return result
+    pass
 
 
 def _sync_segmentations_worker(
@@ -190,63 +94,7 @@ def _sync_segmentations_worker(
     Returns:
         A dictionary with the number of processed segmentations and any errors encountered.
     """
-    result = {"processed": 0, "errors": []}
-
-    try:
-        target_run = target_root.get_run(target_run_name)
-        source_segmentations = run.get_segmentations(voxel_size=voxel_spacings)
-
-        for segmentation in source_segmentations:
-            try:
-                # Filter by source names if specified
-                seg_name = getattr(segmentation, "name", None)
-                if source_names is not None and seg_name and seg_name not in source_names:
-                    continue
-
-                # Filter by source users if specified
-                if source_users and segmentation.user_id not in source_users:
-                    continue
-
-                # Map user ID
-                target_user_id = (
-                    target_users.get(segmentation.user_id, segmentation.user_id)
-                    if target_users
-                    else segmentation.user_id
-                )
-
-                # Get target name
-                target_name = target_names.get(seg_name, seg_name) if seg_name else None
-
-                # Create or get target segmentation
-                target_seg = target_run.new_segmentation(
-                    name=target_name,
-                    user_id=target_user_id,
-                    session_id=segmentation.session_id,
-                    voxel_size=segmentation.voxel_size,
-                    is_multilabel=segmentation.is_multilabel,
-                    exist_ok=exist_ok,
-                )
-
-                # Copy segmentation data
-                if_exists = "replace" if exist_ok else "raise"
-                src = segmentation.zarr()
-                trg = target_seg.zarr()
-                copy_store(src, trg, if_exists=if_exists)
-
-                result["processed"] += 1
-
-                if log:
-                    logger.info(
-                        f"Synced segmentation {seg_name} from {run.name} to {target_run_name} at voxel size {segmentation.voxel_size}",
-                    )
-
-            except Exception as e:
-                result["errors"].append(f"Error syncing segmentation from {run.name}: {str(e)}")
-
-    except Exception as e:
-        result["errors"].append(f"Error processing run {run.name}: {str(e)}")
-
-    return result
+    pass
 
 
 def _sync_tomograms_worker(
@@ -274,70 +122,7 @@ def _sync_tomograms_worker(
     Returns:
         A dictionary with the number of processed tomograms and any errors encountered.
     """
-    result = {"processed": 0, "errors": []}
-
-    try:
-        target_run = target_root.get_run(target_run_name)
-
-        if voxel_spacings is None:
-            voxel_spacings = [vs.voxel_size for vs in run.voxel_spacings]
-
-        for voxel_size in voxel_spacings:
-            try:
-                source_voxel_spacing = run.get_voxel_spacing(voxel_size)
-                target_voxel_spacing = target_run.new_voxel_spacing(voxel_size, exist_ok=True)
-
-                if source_voxel_spacing is None:
-                    result["errors"].append(f"Source voxel spacing {voxel_size} not found in run {run.name}")
-                    continue
-
-                if target_voxel_spacing is None:
-                    result["errors"].append(f"Target voxel spacing {voxel_size} not found in run {target_run_name}")
-                    continue
-
-                if source_tomo_types is None:
-                    source_tomo_types = [tomo.tomo_type for tomo in source_voxel_spacing.tomograms]
-
-                for source_tomo_type in source_tomo_types:
-                    target_tomo_type = target_tomo_types.get(source_tomo_type, source_tomo_type)
-
-                    try:
-                        source_tomogram = source_voxel_spacing.get_tomograms(source_tomo_type)
-                        if len(source_tomogram) == 0:
-                            result["errors"].append(f"Source tomogram {source_tomo_type} not found in run {run.name}")
-                            continue
-                        else:
-                            source_tomogram = source_tomogram[0]
-
-                        # Create or get target tomogram
-                        target_tomogram = target_voxel_spacing.new_tomogram(
-                            tomo_type=target_tomo_type,
-                            exist_ok=exist_ok,
-                        )
-
-                        # Copy tomogram data
-                        if_exists = "replace" if exist_ok else "raise"
-                        src = source_tomogram.zarr()
-                        trg = target_tomogram.zarr()
-                        copy_store(src, trg, if_exists=if_exists)
-
-                        result["processed"] += 1
-
-                        if log:
-                            logger.info(
-                                f"Synced tomogram {source_tomo_type} -> {target_tomo_type} from {run.name} to {target_run_name} at voxel size {voxel_size}",
-                            )
-
-                    except Exception as e:
-                        result["errors"].append(f"Error syncing tomogram {source_tomo_type} from {run.name}: {str(e)}")
-
-            except Exception as e:
-                result["errors"].append(f"Error processing voxel spacing {voxel_size} in run {run.name}: {str(e)}")
-
-    except Exception as e:
-        result["errors"].append(f"Error processing run {run.name}: {str(e)}")
-
-    return result
+    pass
 
 
 def sync_picks(

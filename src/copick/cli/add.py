@@ -114,93 +114,7 @@ def tomogram(
     # Import with regex to extract run name from filename
     copick add tomogram "TS*.mrc" -c config.json --run-regex "^(TS_\\d+)"
     """
-    # Deferred imports for performance
-    import copick
-    from copick.ops.run import map_runs, report_results
-
-    logger = get_logger(__name__, debug=debug)
-
-    # Get root
-    root = copick.from_file(config)
-
-    # Handle glob patterns
-    if "*" in path:
-        if run:
-            logger.warning("Run name is ignored when using glob patterns.")
-            run = ""
-
-        paths = glob.glob(path)
-        if not paths:
-            logger.error(f"No files found matching pattern: {path}")
-            ctx.fail(f"No files found matching pattern: {path}")
-    else:
-        paths = [path]
-
-    # Files extension validation
-    if not file_type:
-        for p in paths:
-            ext = get_volume_format_from_extension(p)
-            if ext not in ["mrc", "zarr", "tiff", "em"]:
-                raise ValueError(
-                    f"Unsupported file format for {p}. Supported formats are 'mrc', 'zarr', 'tiff', and 'em'.",
-                )
-            if not os.path.exists(p):
-                raise FileNotFoundError(f"File not found: {p}")
-
-    # Convert chunk arg
-    chunk_size: Tuple[int, int, int] = tuple(map(int, chunk_size.split(",")[:3]))
-
-    # Prepare runs and group files
-    run_to_file = prepare_runs_from_paths(root, paths, run, run_regex, run_name_prefix, create, logger)
-
-    def import_tomogram(run_obj, file_path, **kwargs):
-        """Process one tomogram file for a single run"""
-        from copick.ops.add import add_tomogram_from_file
-
-        try:
-            add_tomogram_from_file(
-                root=root,
-                run_name=run_obj.name,
-                tomo_type=tomo_type,
-                file_path=file_path,
-                voxel_spacing=voxel_size,
-                file_type=file_type,
-                create_pyramid=create_pyramid,
-                pyramid_levels=pyramid_levels,
-                chunks=chunk_size,
-                transpose=transpose,
-                flip=flip,
-                create=create,
-                exist_ok=overwrite,
-                overwrite=overwrite,
-                log=debug,
-            )
-            return {"processed": 1, "errors": []}
-
-        except Exception as e:
-            error_msg = f"Failed to process {file_path}: {e}"
-            if logger:
-                logger.critical(error_msg)
-            return {"processed": 0, "errors": [error_msg]}
-
-    # Prepare run-specific arguments
-    run_names = list(run_to_file.keys())
-    run_args = [{"file_path": run_to_file[run_name]} for run_name in run_names]
-
-    # Process tomograms using map_runs
-    results = map_runs(
-        callback=import_tomogram,
-        root=root,
-        runs=run_names,
-        workers=max_workers,
-        parallelism="thread",
-        run_args=run_args,
-        show_progress=True,
-        task_desc="Processing tomograms",
-    )
-
-    # Report Results
-    report_results(results, len(paths), logger)
+    pass
 
 
 @add.command(
@@ -286,106 +200,7 @@ def tomogram_from_tomolist(
     # Import with custom run names from index map
     copick add tomograms-dynamo -c config.json --tomolist tomograms.doc --index-map run_mapping.csv
     """
-    import copick
-    from copick.ops.run import map_runs, report_results
-    from copick.util.formats import read_dynamo_tomolist, read_index_map
-
-    logger = get_logger(__name__, debug=debug)
-    root = copick.from_file(config)
-
-    # Parse tomolist to get index → path mapping
-    index_to_path = {}
-    with open(tomolist) as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            parts = line.split("\t")
-            if len(parts) >= 2:
-                idx = int(parts[0])
-                mrc_path = parts[1].strip()
-                index_to_path[idx] = mrc_path
-
-    # Get run names (from index-map or from filenames)
-    index_to_run = read_index_map(index_map) if index_map else read_dynamo_tomolist(tomolist)
-
-    # Build paths list and run_to_file mapping
-    paths = []
-    run_to_file = {}
-    for idx, mrc_path in index_to_path.items():
-        if idx in index_to_run:
-            run_name = index_to_run[idx]
-            if not os.path.exists(mrc_path):
-                logger.warning(f"File not found: {mrc_path}, skipping")
-                continue
-            paths.append(mrc_path)
-            if run_name in run_to_file:
-                logger.warning(f"Duplicate run name {run_name}, skipping {mrc_path}")
-                continue
-            run_to_file[run_name] = mrc_path
-        else:
-            logger.warning(f"Index {idx} not in mapping, skipping {mrc_path}")
-
-    if not paths:
-        ctx.fail("No valid tomograms found in tomolist")
-
-    logger.info(f"Found {len(run_to_file)} tomograms to import from tomolist")
-
-    # Create runs if they don't exist
-    if create:
-        for run_name in run_to_file:
-            if not root.get_run(run_name):
-                root.new_run(run_name)
-                logger.info(f"Created run: {run_name}")
-
-    # Convert chunk arg
-    chunk_size_tuple: Tuple[int, int, int] = tuple(map(int, chunk_size.split(",")[:3]))
-
-    def import_tomogram(run_obj, file_path, **kwargs):
-        """Process one tomogram file for a single run"""
-        from copick.ops.add import add_tomogram_from_file
-
-        try:
-            add_tomogram_from_file(
-                root=root,
-                run_name=run_obj.name,
-                tomo_type=tomo_type,
-                file_path=file_path,
-                voxel_spacing=voxel_size,
-                file_type=file_type,
-                create_pyramid=create_pyramid,
-                pyramid_levels=pyramid_levels,
-                chunks=chunk_size_tuple,
-                transpose=transpose,
-                flip=flip,
-                create=create,
-                exist_ok=overwrite,
-                overwrite=overwrite,
-                log=debug,
-            )
-            return {"processed": 1, "errors": []}
-        except Exception as e:
-            error_msg = f"Failed to process {file_path}: {e}"
-            logger.critical(error_msg)
-            return {"processed": 0, "errors": [error_msg]}
-
-    # Prepare run-specific arguments
-    run_names = list(run_to_file.keys())
-    run_args = [{"file_path": run_to_file[run_name]} for run_name in run_names]
-
-    # Process tomograms using map_runs
-    results = map_runs(
-        callback=import_tomogram,
-        root=root,
-        runs=run_names,
-        workers=max_workers,
-        parallelism="thread",
-        run_args=run_args,
-        show_progress=True,
-        task_desc="Processing tomograms",
-    )
-
-    report_results(results, len(paths), logger)
+    pass
 
 
 @add.command(
@@ -481,95 +296,7 @@ def tomogram_from_star(
     # Import half2 reconstructions
     copick add tomograms-relion -c config.json --tomograms-star tomograms.star --base-dir /path/to/relion_project --half half2
     """
-    import copick
-    from copick.ops.run import map_runs, report_results
-    from copick.util.formats import read_relion_tomograms_star
-
-    logger = get_logger(__name__, debug=debug)
-    root = copick.from_file(config)
-
-    # Parse the star file
-    tomo_data = read_relion_tomograms_star(tomograms_star, half=half, base_dir=base_dir)
-
-    # Build paths list and run_to_file mapping
-    paths = []
-    run_to_file = {}
-    run_to_voxel_size = {}
-
-    for run_name, (mrc_path, vs) in tomo_data.items():
-        if not os.path.exists(mrc_path):
-            logger.warning(f"File not found: {mrc_path}, skipping")
-            continue
-        paths.append(mrc_path)
-        run_to_file[run_name] = mrc_path
-        run_to_voxel_size[run_name] = vs
-
-    if not paths:
-        ctx.fail("No valid tomograms found in tomograms.star")
-
-    logger.info(f"Found {len(run_to_file)} tomograms to import from tomograms.star")
-
-    # Create runs if they don't exist
-    if create:
-        for run_name in run_to_file:
-            if not root.get_run(run_name):
-                root.new_run(run_name)
-                logger.info(f"Created run: {run_name}")
-
-    # Convert chunk arg
-    chunk_size_tuple: Tuple[int, int, int] = tuple(map(int, chunk_size.split(",")[:3]))
-
-    def import_tomogram(run_obj, file_path, run_voxel_size=None, **kwargs):
-        """Process one tomogram file for a single run"""
-        from copick.ops.add import add_tomogram_from_file
-
-        # Use CLI voxel size if provided, otherwise use star file value
-        effective_voxel_size = voxel_size if voxel_size is not None else run_voxel_size
-
-        try:
-            add_tomogram_from_file(
-                root=root,
-                run_name=run_obj.name,
-                tomo_type=tomo_type,
-                file_path=file_path,
-                voxel_spacing=effective_voxel_size,
-                file_type=file_type,
-                create_pyramid=create_pyramid,
-                pyramid_levels=pyramid_levels,
-                chunks=chunk_size_tuple,
-                transpose=transpose,
-                flip=flip,
-                create=create,
-                exist_ok=overwrite,
-                overwrite=overwrite,
-                log=debug,
-            )
-            return {"processed": 1, "errors": []}
-        except Exception as e:
-            error_msg = f"Failed to process {file_path}: {e}"
-            logger.critical(error_msg)
-            return {"processed": 0, "errors": [error_msg]}
-
-    # Prepare run-specific arguments
-    run_names = list(run_to_file.keys())
-    run_args = [
-        {"file_path": run_to_file[run_name], "run_voxel_size": run_to_voxel_size.get(run_name)}
-        for run_name in run_names
-    ]
-
-    # Process tomograms using map_runs
-    results = map_runs(
-        callback=import_tomogram,
-        root=root,
-        runs=run_names,
-        workers=max_workers,
-        parallelism="thread",
-        run_args=run_args,
-        show_progress=True,
-        task_desc="Processing tomograms",
-    )
-
-    report_results(results, len(paths), logger)
+    pass
 
 
 @add.command(
@@ -638,81 +365,7 @@ def segmentation(
 
     PATH: Path to the segmentation file (MRC, Zarr, TIFF, or EM format) or glob pattern.
     """
-    # Deferred import for performance
-    import copick
-    from copick.ops.add import add_segmentation_from_file
-    from copick.ops.run import map_runs, report_results
-
-    logger = get_logger(__name__, debug=debug)
-
-    # Get root
-    root = copick.from_file(config)
-
-    if "*" in path:
-        # If glob pattern is used, the run name can not be used
-        if run:
-            logger.warning("Run name is ignored when using glob patterns.")
-            run = ""
-
-        # Handle glob patterns
-        paths = glob.glob(path)
-        if not paths:
-            logger.error(f"No files found matching pattern: {path}")
-            ctx.fail(f"No files found matching pattern: {path}")
-
-    else:
-        # Single file path
-        paths = [path]
-
-    # Prepare runs and group files
-    run_to_file = prepare_runs_from_paths(root, paths, run, run_regex, run_name_prefix, create, logger)
-
-    def import_segmentation_callback(run_obj, file_path, **kwargs):
-        """Process segmentation files for a single run"""
-        try:
-            add_segmentation_from_file(
-                root=root,
-                run_name=run_obj.name,
-                file_path=file_path,
-                voxel_spacing=voxel_size,
-                name=name,
-                user_id=user_id,
-                session_id=session_id,
-                file_type=file_type,
-                multilabel=True,
-                transpose=transpose,
-                flip=flip,
-                create=create,
-                exist_ok=overwrite,
-                overwrite=overwrite,
-                log=debug,
-            )
-            return {"processed": 1, "errors": []}
-
-        except Exception as e:
-            error_msg = f"Failed to process {file_path}: {e}"
-            if logger:
-                logger.critical(error_msg)
-            return {"processed": 0, "errors": [error_msg]}
-
-    # Prepare run-specific arguments
-    run_names = list(run_to_file.keys())
-    run_args = [{"file_path": run_to_file[run_name]} for run_name in run_names]
-
-    # Process segmentations using map_runs
-    results = map_runs(
-        callback=import_segmentation_callback,
-        root=root,
-        runs=run_names,
-        workers=max_workers,
-        parallelism="thread",
-        run_args=run_args,
-        show_progress=True,
-        task_desc="Processing segmentations",
-    )
-
-    # Report Results
-    report_results(results, len(paths), logger)
+    pass
 
 
 @add.command(
@@ -835,86 +488,7 @@ def object(
     """
     Add a pickable object to the project configuration.
     """
-    # Deferred import for performance
-    import copick
-    from copick.ops.add import add_object
-    from copick.util.path_util import get_data_from_file, get_format_from_extension
-
-    logger = get_logger(__name__, debug=debug)
-
-    # Get root
-    root = copick.from_file(config)
-
-    # Convert object type to is_particle boolean
-    is_particle = object_type.lower() == "particle"
-
-    # Parse color if provided
-    color_tuple = None
-    if color:
-        try:
-            color_values = [int(x.strip()) for x in color.split(",")]
-            if len(color_values) != 4:
-                ctx.fail("Color must be provided as four comma-separated values (R,G,B,A).")
-            color_tuple = tuple(color_values)
-        except ValueError:
-            ctx.fail("Color values must be integers between 0 and 255.")
-
-    # Parse metadata if provided
-    metadata_dict = {}
-    if metadata:
-        try:
-            import json
-
-            metadata_dict = json.loads(metadata)
-        except json.JSONDecodeError:
-            ctx.fail("Metadata must be valid JSON format.")
-
-    # Load volume if provided
-    volume_data = None
-    voxel_spacing = None
-    if volume:
-        # Determine format
-        fmt = volume_format.lower() if volume_format else get_format_from_extension(volume)
-
-        if fmt is None:
-            ctx.fail("Could not determine volume format from extension. Please specify --volume-format.")
-
-        try:
-            volume_data, voxel_spacing = get_data_from_file(volume, fmt)
-        except Exception as e:
-            logger.critical(f"Failed to load volume: {e}")
-            ctx.fail(f"Error loading volume: {e}")
-
-        if voxel_size is not None:
-            voxel_spacing = voxel_size
-
-    try:
-        # Add object
-        obj = add_object(
-            root=root,
-            name=name,
-            is_particle=is_particle,
-            label=label,
-            color=color_tuple,
-            emdb_id=emdb_id,
-            pdb_id=pdb_id,
-            identifier=identifier,
-            map_threshold=map_threshold,
-            radius=radius,
-            volume=volume_data,
-            voxel_size=voxel_spacing,
-            metadata=metadata_dict,
-            exist_ok=exist_ok,
-            save_config=True,
-            config_path=config,
-            log=debug,
-        )
-
-        logger.info(f"Successfully added {object_type} object '{name}' with label {obj.label}")
-
-    except Exception as e:
-        logger.critical(f"Failed to add object: {e}")
-        ctx.fail(f"Error adding object: {e}")
+    pass
 
 
 @add.command(
@@ -963,48 +537,7 @@ def object_volume(
     """
     Add volume data to an existing pickable object.
     """
-    # Deferred import for performance
-    import copick
-    from copick.ops.add import add_object_volume
-    from copick.util.path_util import get_data_from_file, get_format_from_extension
-
-    logger = get_logger(__name__, debug=debug)
-
-    # Get root
-    root = copick.from_file(config)
-
-    # Determine format
-    fmt = volume_format.lower() if volume_format else get_format_from_extension(volume_path)
-
-    if fmt is None:
-        ctx.fail("Could not determine volume format from extension. Please specify --volume-format.")
-
-    # Load volume
-    try:
-        volume_data, voxel_spacing = get_data_from_file(volume_path, fmt)
-    except Exception as e:
-        logger.critical(f"Failed to load volume: {e}")
-        ctx.fail(f"Error loading volume: {e}")
-        raise e
-
-    if voxel_size is not None:
-        voxel_spacing = voxel_size
-
-    try:
-        # Add volume to object
-        add_object_volume(
-            root=root,
-            object_name=object_name,
-            volume=volume_data,
-            voxel_size=voxel_spacing,
-            log=debug,
-        )
-
-        logger.info(f"Successfully added volume data to object '{object_name}'")
-
-    except Exception as e:
-        logger.critical(f"Failed to add volume to object: {e}")
-        ctx.fail(f"Error adding volume to object: {e}")
+    pass
 
 
 @add.command(
@@ -1168,27 +701,7 @@ def picks(
 
     def import_picks(run_obj, file_path, **kwargs):
         """Process one picks file for a single run"""
-        try:
-            add_picks_from_file(
-                root=root,
-                run_name=run_obj.name,
-                file_path=file_path,
-                object_name=object_name,
-                user_id=user_id,
-                session_id=session_id,
-                voxel_spacing=voxel_size,
-                file_type=ft,
-                create=create,
-                exist_ok=overwrite,
-                overwrite=overwrite,
-                log=debug,
-            )
-            return {"processed": 1, "errors": []}
-        except Exception as e:
-            error_msg = f"Failed to process {file_path}: {e}"
-            if logger:
-                logger.critical(error_msg)
-            return {"processed": 0, "errors": [error_msg]}
+        pass
 
     # Prepare run-specific arguments
     run_names = list(run_to_file.keys())
@@ -1301,54 +814,7 @@ def picks_em(
         2,TS_002
         3,TS_003
     """
-    import copick
-    from copick.ops.add import add_picks_grouped_from_file
-    from copick.util.formats import read_index_map
-
-    logger = get_logger(__name__, debug=debug)
-
-    # Get root
-    root = copick.from_file(config)
-
-    # Handle glob patterns
-    if "*" in path:
-        paths = glob.glob(path)
-        if not paths:
-            logger.error(f"No files found matching pattern: {path}")
-            ctx.fail(f"No files found matching pattern: {path}")
-    else:
-        paths = [path]
-
-    # Load index map
-    index_to_run = read_index_map(index_map)
-    logger.info(f"Loaded index map with {len(index_to_run)} entries")
-
-    # Process each file with grouped import
-    total_runs = set()
-    for p in paths:
-        try:
-            results = add_picks_grouped_from_file(
-                root=root,
-                file_path=p,
-                object_name=object_name,
-                user_id=user_id,
-                session_id=session_id,
-                voxel_spacing=voxel_size,
-                index_to_run=index_to_run,
-                file_type="em",
-                tomo_index_row=tomo_index_row,
-                create=create,
-                exist_ok=overwrite,
-                overwrite=overwrite,
-                log=debug,
-            )
-
-            total_runs.update(results.keys())
-            logger.info(f"Imported picks from {p} to {len(results)} runs")
-        except Exception as e:
-            logger.error(f"Failed to import picks from {p}: {e}")
-
-    logger.info(f"Successfully imported picks to {len(total_runs)} runs total")
+    pass
 
 
 @add.command(
@@ -1449,62 +915,7 @@ def picks_dynamo(
         1    /path/to/TS_001.mrc
         2    /path/to/TS_002.mrc
     """
-    import copick
-    from copick.ops.add import add_picks_grouped_from_file
-    from copick.util.formats import read_dynamo_tomolist, read_index_map
-
-    logger = get_logger(__name__, debug=debug)
-
-    # Validate mutually exclusive options
-    if index_map and tomolist:
-        ctx.fail("--index-map and --tomolist are mutually exclusive. Provide only one.")
-    if not index_map and not tomolist:
-        ctx.fail("Either --index-map or --tomolist must be provided.")
-
-    # Get root
-    root = copick.from_file(config)
-
-    # Handle glob patterns
-    if "*" in path:
-        paths = glob.glob(path)
-        if not paths:
-            logger.error(f"No files found matching pattern: {path}")
-            ctx.fail(f"No files found matching pattern: {path}")
-    else:
-        paths = [path]
-
-    # Load index-to-run mapping
-    if tomolist:
-        index_to_run = read_dynamo_tomolist(tomolist)
-        logger.info(f"Loaded tomolist with {len(index_to_run)} tomograms")
-    else:
-        index_to_run = read_index_map(index_map)
-        logger.info(f"Loaded index map with {len(index_to_run)} entries")
-
-    # Process each file with grouped import
-    total_runs = set()
-    for p in paths:
-        try:
-            results = add_picks_grouped_from_file(
-                root=root,
-                file_path=p,
-                object_name=object_name,
-                user_id=user_id,
-                session_id=session_id,
-                voxel_spacing=voxel_size,
-                index_to_run=index_to_run,
-                file_type="dynamo",
-                create=create,
-                exist_ok=overwrite,
-                overwrite=overwrite,
-                log=debug,
-            )
-            total_runs.update(results.keys())
-            logger.info(f"Imported picks from {p} to {len(results)} runs")
-        except Exception as e:
-            logger.error(f"Failed to import picks from {p}: {e}")
-
-    logger.info(f"Successfully imported picks to {len(total_runs)} runs total")
+    pass
 
 
 @add.command(
@@ -1606,80 +1017,4 @@ def picks_relion(
     copick add picks-relion particles.star -c config.json --object-name ribosome \\
         --voxel-size 5.0
     """
-    import copick
-    from copick.ops.add import add_picks_grouped_from_file
-    from copick.util.formats import (
-        detect_relion_version,
-        get_tomogram_centers_from_copick,
-        read_relion5_tomogram_centers,
-        read_star_particles,
-    )
-
-    logger = get_logger(__name__, debug=debug)
-
-    # Get root
-    root = copick.from_file(config)
-
-    # Handle glob patterns
-    if "*" in path:
-        paths = glob.glob(path)
-        if not paths:
-            logger.error(f"No files found matching pattern: {path}")
-            ctx.fail(f"No files found matching pattern: {path}")
-    else:
-        paths = [path]
-
-    # Process each file with grouped import
-    total_runs = set()
-    for p in paths:
-        try:
-            # Read STAR file to detect version
-            df = read_star_particles(p)
-            detected_version = relion_version if relion_version != "auto" else detect_relion_version(df)
-            logger.info(f"Detected RELION version: {detected_version}")
-
-            # Get tomogram centers for RELION 5.0
-            tomogram_centers = None
-            if detected_version == "relion5":
-                if tomograms_star:
-                    # Option A: Use tomograms.star file
-                    logger.info(f"Loading tomogram centers from {tomograms_star}")
-                    tomogram_centers = read_relion5_tomogram_centers(tomograms_star)
-                else:
-                    # Option B: Use existing copick project tomograms
-                    run_names = df["rlnTomoName"].unique().tolist() if "rlnTomoName" in df.columns else []
-                    logger.info(f"Loading tomogram centers from copick project for {len(run_names)} runs")
-                    tomogram_centers = get_tomogram_centers_from_copick(root, run_names, voxel_size)
-
-                    if not tomogram_centers:
-                        ctx.fail(
-                            "RELION 5.0 coordinates require tomogram dimensions. Either:\n"
-                            "  1. Provide --tomograms-star with tomogram metadata, or\n"
-                            "  2. Import tomograms first so dimensions can be read from copick project",
-                        )
-
-            results = add_picks_grouped_from_file(
-                root=root,
-                file_path=p,
-                object_name=object_name,
-                user_id=user_id,
-                session_id=session_id,
-                voxel_spacing=voxel_size,
-                index_to_run={},  # Not used for STAR files
-                file_type="star",
-                create=create,
-                exist_ok=overwrite,
-                overwrite=overwrite,
-                log=debug,
-                tomogram_centers=tomogram_centers,
-                relion_version=detected_version,
-            )
-            total_runs.update(results.keys())
-            logger.info(f"Imported picks from {p} to {len(results)} runs")
-        except (SystemExit, click.UsageError):
-            # Re-raise click exceptions from ctx.fail()
-            raise
-        except Exception as e:
-            logger.error(f"Failed to import picks from {p}: {e}")
-
-    logger.info(f"Successfully imported picks to {len(total_runs)} runs total")
+    pass

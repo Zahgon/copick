@@ -9,9 +9,6 @@ from copick.util.log import get_logger
 logger = get_logger(__name__)
 
 
-def _materialize_run(root: CopickRoot, run: str, run_args: Dict[str, Any], callback: Callable, **kwargs) -> Any:
-    run = root.get_run(name=run)
-    return callback(run, **run_args, **kwargs)
 
 
 def map_runs(

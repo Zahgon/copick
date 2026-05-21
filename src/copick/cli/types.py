@@ -39,13 +39,7 @@ class CopickURI(click.ParamType):
         self.object_type = object_type
         self.role = role
 
-    def convert(self, value, param, ctx):
-        if value is None:
-            return None
-        return str(value)
 
-    def get_metavar(self, param, **kwargs):
-        return "URI"
 
     def __repr__(self):
         return f"CopickURI({self.object_type!r}, {self.role!r})"

@@ -45,15 +45,6 @@ def _is_connection_error(exc: BaseException) -> bool:
 def _make_retry_method(method_name: str):
     """Create a method that delegates to the wrapped filesystem with retry on connection error."""
 
-    def method(self, *args, **kwargs):
-        try:
-            return getattr(self._fs, method_name)(*args, **kwargs)
-        except Exception as exc:
-            if _is_connection_error(exc):
-                logger.warning("Connection error during %s, reconnecting: %s", method_name, exc)
-                self._reconnect()
-                return getattr(self._fs, method_name)(*args, **kwargs)
-            raise
 
     method.__name__ = method_name
     method.__qualname__ = f"ReconnectingFileSystem.{method_name}"
@@ -87,7 +78,7 @@ class ReconnectingFileSystem(AbstractFileSystem):
     @property
     def protocol(self):
         """Expose the wrapped filesystem's protocol for downstream compatibility."""
-        return self._fs.protocol
+        pass
 
     def _reconnect(self) -> None:
         """Recreate the underlying filesystem from stored configuration.
@@ -139,17 +130,9 @@ class ReconnectingFileSystem(AbstractFileSystem):
     get_mapper = _make_retry_method("get_mapper")
 
     # Cache management — delegate without retry (not I/O)
-    def invalidate_cache(self, path=None):
-        return self._fs.invalidate_cache(path)
 
     # Protocol/path utilities — delegate to the wrapped filesystem class
-    def _strip_protocol(self, path):
-        return self._fs._strip_protocol(path)
 
-    @staticmethod
-    def _parent(path):
-        # Delegate to the general AbstractFileSystem implementation
-        return AbstractFileSystem._parent(path)
 
     # -- Fallback for any method not explicitly overridden --
 
@@ -159,15 +142,5 @@ class ReconnectingFileSystem(AbstractFileSystem):
         if not callable(attr):
             return attr
 
-        @wraps(attr)
-        def wrapper(*args, **kwargs):
-            try:
-                return attr(*args, **kwargs)
-            except Exception as exc:
-                if _is_connection_error(exc):
-                    logger.warning("Connection error during %s, reconnecting: %s", name, exc)
-                    self._reconnect()
-                    return getattr(self._fs, name)(*args, **kwargs)
-                raise
 
         return wrapper

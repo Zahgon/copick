@@ -103,12 +103,12 @@ class FormatRegistry:
     @classmethod
     def list_volume_formats(cls) -> List[str]:
         """List all registered volume format names."""
-        return list(cls._volume_handlers.keys())
+        pass
 
     @classmethod
     def list_picks_formats(cls) -> List[str]:
         """List all registered picks format names."""
-        return list(cls._picks_handlers.keys())
+        pass
 
     @classmethod
     def get_volume_handler_for_extension(cls, extension: str) -> Optional[VolumeFormatHandler]:
@@ -120,12 +120,7 @@ class FormatRegistry:
         Returns:
             VolumeFormatHandler or None
         """
-        ext = extension.lower()
-        if not ext.startswith("."):
-            ext = f".{ext}"
-        if ext in cls._volume_extension_map:
-            return cls._volume_handlers[cls._volume_extension_map[ext]]
-        return None
+        pass
 
     @classmethod
     def get_picks_handler_for_extension(cls, extension: str) -> Optional[PicksFormatHandler]:
@@ -137,12 +132,7 @@ class FormatRegistry:
         Returns:
             PicksFormatHandler or None
         """
-        ext = extension.lower()
-        if not ext.startswith("."):
-            ext = f".{ext}"
-        if ext in cls._picks_extension_map:
-            return cls._picks_handlers[cls._picks_extension_map[ext]]
-        return None
+        pass
 
 
 def get_volume_format_from_path(path: str) -> Optional[str]:

@@ -27,21 +27,6 @@ COMMAND_CATEGORIES = {
 }
 
 
-@click.group(cls=GroupedCommandGroup, command_categories=COMMAND_CATEGORIES)
-@click.version_option(version=version, message="copick %(version)s")
-@click.pass_context
-def _cli(ctx):
-    plugin_packages = get_installed_plugin_packages()
-    plugins = ""
-    if plugin_packages:
-        for package in sorted(plugin_packages):
-            plugins += f" {package} |"
-        plugins = plugins[:-2]
-        plugins = f"{plugins}"
-
-    text = f"copick {version} |{plugins}" if plugins else f"copick {version}"
-    logger.info(text)
-    logger.info(f"{'-' * len(text)}")
 
 
 @click.group(
